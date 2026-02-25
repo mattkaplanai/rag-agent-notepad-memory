@@ -1,0 +1,25 @@
+# RAG Projesi - Bağımlılıklar (Python 3.10+ önerilir)
+
+# Ortam değişkenleri
+python-dotenv>=1.0.0
+
+# LlamaIndex - indeksleme ve vektör arama (Python 3.10+ gerekir; 3.9'da 0.10.x kullanın)
+llama-index-core>=0.10.0,<0.11.0
+llama-index-readers-file>=0.1.0
+llama-index-embeddings-openai>=0.1.0
+llama-index-llms-openai>=0.1.0
+# LangChain - zincir ve OpenAI köprüsü
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langchain-core>=0.1.0
+
+# OpenAI
+openai>=1.0.0
+
+# Gradio - web arayüzü (HfFolder uyumluluğu için huggingface_hub sınırı)
+huggingface_hub>=0.19.0,<0.26.0
+gradio>=4.0.0
+
+# Belgeler için (PDF, Word otomatik desteklenir)
+pypdf>=3.0.0
+python-docx>=1.0.0

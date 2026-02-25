@@ -1,0 +1,26 @@
+# Ortam ve anahtarlar
+.env
+venv/
+.venv/
+env/
+
+# LlamaIndex indeks deposu
+storage/
+
+# Agent notepad ve uzun bellek
+notepad.txt
+long_memory.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
