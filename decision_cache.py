@@ -9,12 +9,14 @@ Level 2 — Semantic match: Embed the description text and compare cosine
                           exceeds the threshold, reuse the cached decision
                           (costs only 1 embedding call instead of full LLM).
 
-Cache is persisted to disk as JSON so it survives restarts.
+Cache is persisted to disk as JSON (for fast lookups with embeddings)
+and also exported to an Excel spreadsheet (for human review).
 """
 
 import hashlib
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +24,7 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CACHE_FILE = PROJECT_ROOT / "decision_cache.json"
+EXCEL_FILE = PROJECT_ROOT / "decision_log.xlsx"
 
 SEMANTIC_THRESHOLD = 0.90
 
@@ -89,6 +92,91 @@ class DecisionCache:
             json.dumps(self.entries, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        self._export_excel()
+
+    def _export_excel(self):
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Refund Decisions"
+
+        headers = [
+            "No", "Date/Time", "Case Type", "Flight Type", "Ticket Type",
+            "Payment Method", "Description", "Decision", "Confidence",
+            "Analysis Steps", "Reasons", "Applicable Regulations",
+            "Refund Type", "Refund Payment", "Refund Timeline",
+            "Passenger Action Items",
+        ]
+
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="2E5090", end_color="2E5090", fill_type="solid")
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
+        )
+
+        for col_idx, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", wrap_text=True)
+            cell.border = thin_border
+
+        decision_fills = {
+            "APPROVED": PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+            "DENIED": PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+            "PARTIAL": PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid"),
+        }
+
+        for row_idx, entry in enumerate(self.entries, 2):
+            result = entry.get("result", {})
+            refund = result.get("refund_details") or {}
+            ts = entry.get("timestamp", 0)
+            dt_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
+
+            row_data = [
+                row_idx - 1,
+                dt_str,
+                entry.get("case_type", ""),
+                entry.get("flight_type", ""),
+                entry.get("ticket_type", ""),
+                entry.get("payment_method", ""),
+                entry.get("description_preview", ""),
+                result.get("decision", ""),
+                result.get("confidence", ""),
+                "\n".join(result.get("analysis_steps", [])),
+                "\n".join(result.get("reasons", [])),
+                "\n".join(result.get("applicable_regulations", [])),
+                refund.get("refund_type", "N/A"),
+                refund.get("payment_method", "N/A"),
+                refund.get("timeline", "N/A"),
+                "\n".join(result.get("passenger_action_items", [])),
+            ]
+
+            for col_idx, value in enumerate(row_data, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                cell.border = thin_border
+
+            decision_cell = ws.cell(row=row_idx, column=8)
+            fill = decision_fills.get(result.get("decision", ""))
+            if fill:
+                decision_cell.fill = fill
+                decision_cell.font = Font(bold=True)
+
+        col_widths = [5, 18, 22, 18, 15, 15, 40, 12, 12, 50, 40, 40, 30, 25, 25, 40]
+        for col_idx, width in enumerate(col_widths, 1):
+            ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = width
+
+        ws.auto_filter.ref = ws.dimensions
+        ws.freeze_panes = "A2"
+
+        wb.save(str(EXCEL_FILE))
+        print(f"[CACHE] 📊 Excel log updated: {EXCEL_FILE.name} ({len(self.entries)} rows)")
 
     def lookup(
         self,
@@ -164,7 +252,9 @@ class DecisionCache:
             "case_type": case_type,
             "flight_type": flight_type,
             "ticket_type": ticket_type,
-            "description_preview": description[:100],
+            "payment_method": payment_method,
+            "accepted_alternative": accepted_alternative,
+            "description_preview": description[:200],
             "embedding": embedding,
             "result": result,
             "timestamp": time.time(),
@@ -183,4 +273,6 @@ class DecisionCache:
     def clear(self):
         self.entries = []
         self._save()
-        print("[CACHE] 🗑️ Cache cleared.")
+        if EXCEL_FILE.exists():
+            EXCEL_FILE.unlink()
+        print("[CACHE] 🗑️ Cache and Excel log cleared.")
