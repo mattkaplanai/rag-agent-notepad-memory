@@ -315,14 +315,23 @@ def get_refund_decision(
 
 # ── Gradio UI ────────────────────────────────────────────────────────────────
 
-def format_decision(result: dict) -> str:
+def format_decision(result: dict, cache_status: str = "miss") -> str:
     d = result.get("decision", "UNKNOWN")
     emoji = {"APPROVED": "✅", "DENIED": "❌", "PARTIAL": "⚠️"}.get(d, "❓")
     confidence = result.get("confidence", "?")
 
+    cache_labels = {
+        "exact_hit": "⚡ **Cache: EXACT HIT** — Instant response, $0 LLM cost",
+        "semantic_hit": "🔍 **Cache: SIMILAR CASE FOUND** — Reused previous decision, minimal cost",
+        "miss": "🤖 **Cache: MISS** — Full LLM analysis performed",
+    }
+    cache_line = cache_labels.get(cache_status, "")
+
     lines = [
         f"# {emoji} Decision: {d}",
         f"**Confidence:** {confidence}",
+        "",
+        cache_line,
         "",
         "---",
         "## 🔍 Analysis (Chain-of-Thought)",
@@ -356,21 +365,48 @@ def format_decision(result: dict) -> str:
 
 def create_gradio_app():
     import gradio as gr
+    from decision_cache import DecisionCache
 
     print("[APP] Building document index …")
     index = build_or_load_index()
-    print("[APP] Ready.")
+    cache = DecisionCache()
+    print(f"[APP] Ready. Cache has {cache.stats['total_entries']} entries.")
 
     def analyze(case_type, flight_type, ticket_type, payment_method,
                 accepted_alternative, description):
         if not description or not description.strip():
-            return "⚠️ Please describe what happened with your flight."
+            return "⚠️ Please describe what happened with your flight.", ""
+
+        cached_result, cache_status = cache.lookup(
+            case_type, flight_type, ticket_type,
+            payment_method, accepted_alternative, description,
+        )
+
+        if cached_result:
+            return (
+                format_decision(cached_result, cache_status),
+                f"📊 Cache: {cache.stats['total_entries']} entries stored",
+            )
 
         result = get_refund_decision(
             index, case_type, flight_type, ticket_type,
             payment_method, accepted_alternative, description,
         )
-        return format_decision(result)
+
+        if result.get("decision") != "ERROR":
+            cache.store(
+                case_type, flight_type, ticket_type,
+                payment_method, accepted_alternative, description, result,
+            )
+
+        return (
+            format_decision(result, "miss"),
+            f"📊 Cache: {cache.stats['total_entries']} entries stored",
+        )
+
+    def clear_cache():
+        cache.clear()
+        return f"📊 Cache cleared. 0 entries stored."
 
     with gr.Blocks(
         title="Airlines Refund Decision Maker",
@@ -432,6 +468,13 @@ def create_gradio_app():
                 output = gr.Markdown(
                     value="*Submit your case details to receive a decision.*"
                 )
+                gr.Markdown("---")
+                cache_status_display = gr.Textbox(
+                    label="Cache Status",
+                    value=f"📊 Cache: {cache.stats['total_entries']} entries stored",
+                    interactive=False,
+                )
+                clear_cache_btn = gr.Button("🗑️ Clear Cache", size="sm")
 
         submit_btn.click(
             fn=analyze,
@@ -439,16 +482,22 @@ def create_gradio_app():
                 case_type, flight_type, ticket_type,
                 payment_method, accepted_alternative, description,
             ],
-            outputs=output,
+            outputs=[output, cache_status_display],
+        )
+
+        clear_cache_btn.click(
+            fn=clear_cache,
+            outputs=cache_status_display,
         )
 
         gr.Markdown("---")
         gr.Markdown(
-            "**Prompt Engineering Techniques Used:**  \n"
-            "🔗 Chain-of-Thought Reasoning · "
+            "**Techniques Used:**  \n"
+            "🔗 Chain-of-Thought · "
             "📐 Structured JSON Output · "
             "📝 Few-Shot Examples · "
-            "🔄 Dynamic System Prompts (RAG-grounded)"
+            "🔄 Dynamic RAG Prompts · "
+            "⚡ Two-Level Cache (Exact + Semantic)"
         )
 
     return app
