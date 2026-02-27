@@ -100,6 +100,15 @@ def retrieve_regulations(index, query: str, top_k: int = 8) -> str:
     return "\n\n".join(n.get_content() for n in nodes)
 
 
+def retrieve_regulations_advanced(index, query: str, top_k: int = 8):
+    """Advanced retrieval: hybrid search + re-ranking + citations."""
+    from advanced_rag import hybrid_search, RetrievalResult
+    if index is None:
+        return "", RetrievalResult(query=query)
+    result = hybrid_search(index, query, top_k=top_k)
+    return result.context_text, result
+
+
 # ── Prompt Engineering ───────────────────────────────────────────────────────
 #
 # KEY CONCEPTS demonstrated here:
@@ -265,7 +274,7 @@ def get_refund_decision(
     payment_method: str,
     accepted_alternative: str,
     description: str,
-) -> dict:
+) -> tuple[dict, any]:
     from langchain_openai import ChatOpenAI
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
@@ -276,7 +285,7 @@ def get_refund_decision(
     )
 
     retrieval_query = f"{case_type} {flight_type} {description}"
-    regulations = retrieve_regulations(index, retrieval_query)
+    regulations, retrieval_result = retrieve_regulations_advanced(index, retrieval_query)
 
     system = SYSTEM_PROMPT.format(
         regulations=regulations if regulations else "(No regulations retrieved — decide based on your training knowledge of DOT rules.)",
@@ -300,7 +309,7 @@ def get_refund_decision(
         cleaned = cleaned.strip()
 
     try:
-        return json.loads(cleaned)
+        return json.loads(cleaned), retrieval_result
     except json.JSONDecodeError:
         return {
             "decision": "ERROR",
@@ -310,7 +319,7 @@ def get_refund_decision(
             "applicable_regulations": [],
             "refund_details": None,
             "passenger_action_items": ["Please try again or rephrase your description."],
-        }
+        }, retrieval_result
 
 
 # ── Gradio UI ────────────────────────────────────────────────────────────────
@@ -374,8 +383,10 @@ def create_gradio_app():
 
     def analyze(case_type, flight_type, ticket_type, payment_method,
                 accepted_alternative, description):
+        from advanced_rag import format_retrieval_dashboard
+
         if not description or not description.strip():
-            return "⚠️ Please describe what happened with your flight.", ""
+            return "⚠️ Please describe what happened with your flight.", "", ""
 
         cached_result, cache_status = cache.lookup(
             case_type, flight_type, ticket_type,
@@ -386,9 +397,10 @@ def create_gradio_app():
             return (
                 format_decision(cached_result, cache_status),
                 f"📊 Cache: {cache.stats['total_entries']} entries stored",
+                "*Served from cache — no retrieval performed.*",
             )
 
-        result = get_refund_decision(
+        result, retrieval_result = get_refund_decision(
             index, case_type, flight_type, ticket_type,
             payment_method, accepted_alternative, description,
         )
@@ -399,9 +411,12 @@ def create_gradio_app():
                 payment_method, accepted_alternative, description, result,
             )
 
+        dashboard = format_retrieval_dashboard(retrieval_result) if retrieval_result else ""
+
         return (
             format_decision(result, "miss"),
             f"📊 Cache: {cache.stats['total_entries']} entries stored",
+            dashboard,
         )
 
     def clear_cache():
@@ -464,10 +479,15 @@ def create_gradio_app():
                 )
 
             with gr.Column(scale=1):
-                gr.Markdown("### 📄 Decision")
-                output = gr.Markdown(
-                    value="*Submit your case details to receive a decision.*"
-                )
+                with gr.Tabs():
+                    with gr.Tab("📄 Decision"):
+                        output = gr.Markdown(
+                            value="*Submit your case details to receive a decision.*"
+                        )
+                    with gr.Tab("📡 Retrieval Dashboard"):
+                        retrieval_dashboard = gr.Markdown(
+                            value="*Submit a case to see how documents are retrieved, ranked, and cited.*"
+                        )
                 gr.Markdown("---")
                 cache_status_display = gr.Textbox(
                     label="Cache Status",
@@ -482,7 +502,7 @@ def create_gradio_app():
                 case_type, flight_type, ticket_type,
                 payment_method, accepted_alternative, description,
             ],
-            outputs=[output, cache_status_display],
+            outputs=[output, cache_status_display, retrieval_dashboard],
         )
 
         clear_cache_btn.click(
@@ -494,10 +514,13 @@ def create_gradio_app():
         gr.Markdown(
             "**Techniques Used:**  \n"
             "🔗 Chain-of-Thought · "
-            "📐 Structured JSON Output · "
+            "📐 Structured JSON · "
             "📝 Few-Shot Examples · "
-            "🔄 Dynamic RAG Prompts · "
-            "⚡ Two-Level Cache (Exact + Semantic)"
+            "🔄 Dynamic RAG · "
+            "⚡ Two-Level Cache · "
+            "🔀 Hybrid Search (BM25 + Vector) · "
+            "📊 Re-Ranking · "
+            "📚 Source Citations"
         )
 
     return app
