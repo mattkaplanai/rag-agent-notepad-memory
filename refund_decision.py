@@ -63,15 +63,19 @@ def build_or_load_index():
     )
     from llama_index.embeddings.openai import OpenAIEmbedding
 
+    from llama_index.core.node_parser import SentenceSplitter
+
     BILGILER_DIR.mkdir(parents=True, exist_ok=True)
     Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+    Settings.chunk_size = 512
+    Settings.chunk_overlap = 50
     required_exts = [".pdf", ".docx", ".doc", ".txt", ".md"]
 
     if INDEX_DIR.exists():
         try:
             ctx = StorageContext.from_defaults(persist_dir=str(INDEX_DIR))
             index = load_index_from_storage(ctx)
-            print("[RAG] Index loaded from storage/")
+            print("[RAG] Index loaded from storage/ (512-token chunks)")
             return index
         except Exception:
             pass
@@ -85,8 +89,9 @@ def build_or_load_index():
     if not documents:
         print("[RAG] No documents found in bilgiler/")
         return None
-    print(f"[RAG] Building index: {len(documents)} documents …")
-    index = VectorStoreIndex.from_documents(documents)
+    print(f"[RAG] Building index: {len(documents)} documents (chunk_size=512) …")
+    node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=50)
+    index = VectorStoreIndex.from_documents(documents, transformations=[node_parser])
     index.storage_context.persist(persist_dir=str(INDEX_DIR))
     print("[RAG] Index ready.")
     return index
@@ -100,12 +105,12 @@ def retrieve_regulations(index, query: str, top_k: int = 8) -> str:
     return "\n\n".join(n.get_content() for n in nodes)
 
 
-def retrieve_regulations_advanced(index, query: str, top_k: int = 8):
+def retrieve_regulations_advanced(index, query: str, top_k: int = 12):
     """Advanced retrieval: hybrid search + re-ranking + citations."""
     from advanced_rag import hybrid_search, RetrievalResult
     if index is None:
         return "", RetrievalResult(query=query)
-    result = hybrid_search(index, query, top_k=top_k)
+    result = hybrid_search(index, query, top_k=top_k, vector_k=16, bm25_k=16)
     return result.context_text, result
 
 
@@ -203,6 +208,42 @@ OUTPUT:
     "You may check flightrights.gov for airline commitments regarding amenities for delays caused by the airline."
   ]
 }}}}
+
+=== EXAMPLE 3 (DENIED — baggage threshold) ===
+INPUT:
+  Case Type: Baggage Lost or Delayed
+  Flight Type: International
+  Ticket Type: Refundable
+  Payment: Credit Card
+  Accepted Alternative: No
+  Description: I flew on a 16-hour flight from Singapore to New York. I paid $100 for checked baggage. My bag was delivered to my hotel 25 hours after I deplaned. I want my baggage fee refunded.
+
+OUTPUT:
+{{{{
+  "decision": "DENIED",
+  "confidence": "HIGH",
+  "analysis_steps": [
+    "Step 1 — Identify the case type: The passenger's checked bag was delayed on an international flight. This falls under 'Baggage Lost or Delayed'.",
+    "Step 2 — Determine the flight duration: The flight was 16 hours, which is MORE than 12 hours.",
+    "Step 3 — Select the correct baggage delay threshold: For international flights MORE than 12 hours in duration, a bag is considered 'significantly delayed' ONLY if it is not delivered within 30 hours after arrival. This is NOT the 15-hour threshold — the 15-hour threshold applies ONLY to international flights of 12 hours or LESS.",
+    "Step 4 — Compare delivery time to threshold: The bag was delivered 25 hours after deplaning. 25 hours < 30 hours. The bag was NOT significantly delayed under DOT rules.",
+    "Step 5 — Conclusion: Since the bag was delivered within the 30-hour window, the passenger is not entitled to a refund of the baggage fee."
+  ],
+  "reasons": [
+    "The flight was 16 hours (more than 12 hours), so the applicable baggage delay threshold is 30 hours — NOT 15 hours.",
+    "The bag was delivered 25 hours after deplaning, which is within the 30-hour threshold.",
+    "The bag is NOT considered 'significantly delayed' under DOT regulations."
+  ],
+  "applicable_regulations": [
+    "DOT Baggage Delay Rule — International flights over 12 hours: bag must be delivered within 30 hours to NOT be significantly delayed.",
+    "DOT Baggage Delay Rule — The 15-hour threshold applies ONLY to international flights of 12 hours or less in duration."
+  ],
+  "refund_details": null,
+  "passenger_action_items": [
+    "You are not entitled to a refund of the baggage fee because the bag was delivered within the 30-hour threshold.",
+    "If the bag had been delivered after 30 hours, you would have been entitled to a refund."
+  ]
+}}}}
 """
 
 SYSTEM_PROMPT = """You are an expert Airlines Refund Decision Maker AI, trained on U.S. Department of Transportation (DOT) regulations.
@@ -224,7 +265,12 @@ CRITICAL RULES:
 - For schedule changes: domestic = 3+ hours threshold, international = 6+ hours threshold.
 - If the passenger accepted a rebooking, voucher, or traveled on the flight, they are generally NOT entitled to a refund.
 - Non-refundable tickets do NOT entitle a refund when the flight operates as scheduled and the passenger chooses not to travel.
-- Baggage delay thresholds: domestic = 12 hours, international (≤12h flight) = 15 hours, international (>12h flight) = 30 hours.
+- Baggage delay refund logic (MUST check flight duration first):
+  * Domestic: refund the baggage fee ONLY if bag arrived MORE than 12 hours after deplaning.
+  * International, flight ≤12 hours: refund ONLY if bag arrived MORE than 15 hours after deplaning.
+  * International, flight >12 hours: refund ONLY if bag arrived MORE than 30 hours after deplaning.
+  If the bag arrived WITHIN the threshold, the bag is NOT significantly delayed and the passenger is NOT entitled to a refund. "Within the threshold" = bag arrived on time = DENIED.
+  IMPORTANT: Do NOT confuse "within the threshold" with "qualifying for a refund." Within = on time = DENIED.
 - 24-hour cancellation: only applies to tickets purchased 7+ days before departure.
 
 OUTPUT FORMAT: You MUST respond with valid JSON matching this exact schema:
