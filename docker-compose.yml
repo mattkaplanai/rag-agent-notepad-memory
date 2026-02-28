@@ -1,0 +1,31 @@
+services:
+  gradio:
+    build: .
+    container_name: refund-gradio
+    ports:
+      - "7861:7861"
+    env_file:
+      - .env
+    volumes:
+      - index-data:/app/storage
+      - ./data/bilgiler:/app/data/bilgiler
+    command: python -m app.main
+    restart: unless-stopped
+
+  django-api:
+    build: .
+    container_name: refund-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - index-data:/app/storage
+      - ./data/bilgiler:/app/data/bilgiler
+      - django-db:/app/api
+    command: python api/manage.py runserver 0.0.0.0:8000
+    restart: unless-stopped
+
+volumes:
+  index-data:
+  django-db:
