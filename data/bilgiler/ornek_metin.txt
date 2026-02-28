@@ -1,0 +1,10 @@
+Bu dosya RAG uygulamasını test etmek için örnek bir metindir.
+
+Proje, bilgiler klasöründeki PDF, Word ve metin dosyalarını indeksleyerek
+sorularınıza cevap üretir. LlamaIndex ile vektör arama, LangChain ve OpenAI
+ile cevap oluşturma, Gradio ile web arayüzü kullanılır.
+
+Test sorusu örnekleri:
+- Bu projede hangi araçlar kullanılıyor?
+- RAG ne anlama geliyor?
+- Cevap nasıl oluşturuluyor?
