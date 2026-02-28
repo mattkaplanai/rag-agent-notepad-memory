@@ -5,8 +5,10 @@ from langgraph.prebuilt import create_react_agent
 
 from app.config import LLM_MODEL, SPECIALIST_TEMPERATURE
 from app.prompts.analyst import ANALYST_PROMPT
-from app.tools.threshold import check_delay_threshold, check_baggage_threshold
-from app.tools.calculator import calculate_refund, calculate_refund_timeline
+from app.tools.check_delay import check_delay_threshold
+from app.tools.check_baggage import check_baggage_threshold
+from app.tools.refund_calculator import calculate_refund
+from app.tools.timeline_calculator import calculate_refund_timeline
 
 
 def build_analyst():

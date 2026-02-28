@@ -29,8 +29,10 @@ def make_search_tool(index):
 
 def get_all_tools(index):
     """Return all tools for the refund decision agent."""
-    from app.tools.threshold import check_delay_threshold, check_baggage_threshold
-    from app.tools.calculator import calculate_refund, calculate_refund_timeline
+    from app.tools.check_delay import check_delay_threshold
+    from app.tools.check_baggage import check_baggage_threshold
+    from app.tools.refund_calculator import calculate_refund
+    from app.tools.timeline_calculator import calculate_refund_timeline
     from app.tools.letter import generate_decision_letter
 
     return [
