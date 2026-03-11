@@ -283,12 +283,24 @@ def make_search_tool(index):
         """Search DOT regulations and documents for information relevant to the query.
         Use this to look up specific rules, thresholds, or policies.
         Always search before making a decision — do not rely on memory alone."""
+        _log = "[RESEARCHER TOOL] search_regulations"
+        print(f"{_log} called with query: {query[:100]}{'...' if len(query) > 100 else ''}", flush=True)
         if index is None:
+            print(f"{_log} → No index; returning empty.", flush=True)
             return "No document index available."
         from advanced_rag import hybrid_search
         result = hybrid_search(index, query, top_k=8)
         if not result.chunks:
+            print(f"{_log} → 0 chunks found.", flush=True)
             return "No relevant regulations found for this query."
+        sources = [c.source_file for c in result.chunks]
+        scores = [c.rerank_score for c in result.chunks]
+        total_chars = sum(len(c.content) for c in result.chunks)
+        print(
+            f"{_log} → {len(result.chunks)} chunk(s), {total_chars} chars total. "
+            f"Sources: {sources}. Scores: {[f'{s:.3f}' for s in scores]}",
+            flush=True,
+        )
         chunks_text = "\n\n---\n\n".join(
             f"[Source: {c.source_file} | Relevance: {c.rerank_score:.3f}]\n{c.content}"
             for c in result.chunks
@@ -300,11 +312,13 @@ def make_search_tool(index):
 
 def get_all_tools(index):
     """Return all tools for the refund decision agent."""
+    from app.tools.currency import convert_currency
     return [
         check_delay_threshold,
         check_baggage_threshold,
         calculate_refund,
         calculate_refund_timeline,
         generate_decision_letter,
+        convert_currency,
         make_search_tool(index),
     ]

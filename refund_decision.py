@@ -66,7 +66,8 @@ def build_or_load_index():
     from llama_index.core.node_parser import SentenceSplitter
 
     BILGILER_DIR.mkdir(parents=True, exist_ok=True)
-    Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+    embed_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    Settings.embed_model = OpenAIEmbedding(model=embed_model)
     Settings.chunk_size = 512
     Settings.chunk_overlap = 50
     required_exts = [".pdf", ".docx", ".doc", ".txt", ".md"]
@@ -343,7 +344,8 @@ def get_refund_decision(
         ("human", "Analyze this refund request and return your decision as JSON:\n\n{case}"),
     ])
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
+    llm_model = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
+    llm = ChatOpenAI(model=llm_model, temperature=0.1)
     chain = prompt | llm | StrOutputParser()
     raw = chain.invoke({"case": case_text})
 

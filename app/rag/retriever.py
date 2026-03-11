@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from app.config import VECTOR_SEARCH_K, BM25_SEARCH_K
+from app.config import EMBEDDING_MODEL, VECTOR_SEARCH_K, BM25_SEARCH_K
 from app.models.schemas import RetrievedChunk, RetrievalResult
 
 
@@ -59,7 +59,7 @@ def _rerank_chunks(query, chunks):
     from openai import OpenAI
     client = OpenAI()
     texts_to_embed = [query] + [c.content[:500] for c in chunks]
-    response = client.embeddings.create(input=texts_to_embed, model="text-embedding-3-small")
+    response = client.embeddings.create(input=texts_to_embed, model=EMBEDDING_MODEL)
     embeddings = [d.embedding for d in response.data]
     query_emb = embeddings[0]
 

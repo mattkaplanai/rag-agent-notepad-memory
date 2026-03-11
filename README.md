@@ -39,7 +39,27 @@ cp .env.example .env
 OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### 4. Belgeleri ekleyin
+### 4. (İsteğe bağlı) PostgreSQL — Karar önbelleği
+
+Multi-agent refund uygulaması (`multi_agent.py`), cache’e ek olarak PostgreSQL’de kararları saklayabilir (exact + semantic hit, maliyet düşürme). Kullanmak için:
+
+1. PostgreSQL kurun (örn. `brew install postgresql@16` veya Docker: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`).
+2. Veritabanı oluşturun: `createdb refund_db` (veya psql ile `CREATE DATABASE refund_db;`).
+3. `.env` içine ekleyin (veya tek satır: `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/refund_db`):
+
+   ```
+   POSTGRES_HOST=localhost
+   POSTGRES_PORT=5432
+   POSTGRES_USER=postgres
+   POSTGRES_PASSWORD=postgres
+   POSTGRES_DB=refund_db
+   ```
+
+4. Uygulama açılışında tablo otomatik oluşturulur. Verileri görmek için pgAdmin veya DBeaver kullanabilirsiniz.
+
+Bu değişkenleri tanımlamazsanız uygulama sadece cache (JSON + Excel) ile çalışır; DB devre dışı kalır.
+
+### 5. Belgeleri ekleyin
 
 - **bilgiler** klasörüne PDF (`.pdf`), Word (`.docx`, `.doc`) veya metin (`.txt`, `.md`) dosyalarınızı koyun.
 - İlk çalıştırmada bu dosyalar taranıp vektör indeksine dönüştürülür; indeks `storage` klasörüne kaydedilir.
@@ -92,3 +112,13 @@ Project with Ergun/
 
 - İndeks ilk çalıştırmada veya **bilgiler** klasörüne yeni dosya ekledikten sonra yeniden oluşturulur (mevcut `storage` silinirse veya hata alırsanız tekrar oluşur).
 - Cevap maliyeti OpenAI kullanımına bağlıdır; `gpt-4o-mini` varsayılan modeldir, `rag_app.py` içinden değiştirilebilir.
+
+### Embedding model değişince (cache + DB temizliği)
+
+Refund akışı sırasıyla: **cache exact hit → cache semantic hit → db exact hit → db semantic hit → RAG**. Embedding modelini değiştirdiğinizde (örn. `text-embedding-3-small` → `text-embedding-3-large`) eski cache/DB kayıtları yeni modelle uyumsuz olur. Düzeni korumak için temizlik script'ini çalıştırın:
+
+```bash
+python scripts/clear_decision_data.py
+```
+
+Bu script `decision_cache.json` dosyasını boşaltır ve PostgreSQL `refund_decisions` tablosunu truncate eder. Sonrasında tüm yeni kayıtlar seçili embedding modeliyle tutarlı şekilde yazılır.

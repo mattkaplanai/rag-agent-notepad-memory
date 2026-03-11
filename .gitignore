@@ -19,8 +19,18 @@ __pycache__/
 dist/
 build/
 
+# App logs (watch with: tail -f logs/multi_agent.log)
+logs/
+
+# Node (MCP currency server)
+node_modules/
+
+# macOS
+.DS_Store
+
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo

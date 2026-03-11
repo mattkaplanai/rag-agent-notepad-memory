@@ -26,9 +26,12 @@ if not OPENAI_API_KEY:
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
 # ── Model Settings ───────────────────────────────────────────────────────────
+# Override via .env: OPENAI_LLM_MODEL, OPENAI_CLASSIFIER_MODEL, OPENAI_RESEARCHER_MODEL, OPENAI_EMBEDDING_MODEL
 
-LLM_MODEL = "gpt-4o-mini"
-EMBEDDING_MODEL = "text-embedding-3-small"
+LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
+CLASSIFIER_MODEL = os.getenv("OPENAI_CLASSIFIER_MODEL", "gpt-5-nano")
+RESEARCHER_MODEL = os.getenv("OPENAI_RESEARCHER_MODEL", "gpt-4o")
+EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 CLASSIFIER_TEMPERATURE = 0.0
 SPECIALIST_TEMPERATURE = 0.1
 JUDGE_TEMPERATURE = 0.0

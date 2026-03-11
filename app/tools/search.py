@@ -34,6 +34,7 @@ def get_all_tools(index):
     from app.tools.refund_calculator import calculate_refund
     from app.tools.timeline_calculator import calculate_refund_timeline
     from app.tools.letter import generate_decision_letter
+    from app.tools.currency import convert_currency
 
     return [
         check_delay_threshold,
@@ -41,5 +42,6 @@ def get_all_tools(index):
         calculate_refund,
         calculate_refund_timeline,
         generate_decision_letter,
+        convert_currency,
         make_search_tool(index),
     ]

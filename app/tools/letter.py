@@ -18,6 +18,7 @@ def generate_decision_letter(
 ) -> str:
     """Generate a formal refund request letter the passenger can send to the airline.
     Use ONLY after the decision is APPROVED or PARTIAL.
+    refund_amount must be in USD (e.g. '$250.00 USD' or '$1,500.00 USD'). We always state amounts in dollars.
     reasons and regulations should be comma-separated lists."""
 
     today = datetime.now().strftime("%B %d, %Y")

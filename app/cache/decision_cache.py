@@ -12,7 +12,7 @@ from typing import Optional
 
 import numpy as np
 
-from app.config import CACHE_FILE, EXCEL_FILE, SEMANTIC_THRESHOLD
+from app.config import CACHE_FILE, EMBEDDING_MODEL, EXCEL_FILE, SEMANTIC_THRESHOLD
 
 
 def _cosine_similarity(a, b):
@@ -30,7 +30,7 @@ def _hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_a
 def _get_embedding(text):
     from openai import OpenAI
     client = OpenAI()
-    response = client.embeddings.create(input=text, model="text-embedding-3-small")
+    response = client.embeddings.create(input=text, model=EMBEDDING_MODEL)
     return response.data[0].embedding
 
 

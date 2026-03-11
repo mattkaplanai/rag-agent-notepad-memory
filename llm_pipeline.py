@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
+from typing import List, Optional
 
 from dotenv import load_dotenv
 
@@ -31,15 +32,15 @@ os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 class ClassifierOutput:
     case_category: str = ""
     flight_type: str = ""
-    flight_duration_hours: float | None = None
-    delay_hours: float | None = None
-    bag_delay_hours: float | None = None
-    ticket_price: float | None = None
-    ancillary_fee: float | None = None
+    flight_duration_hours: Optional[float] = None
+    delay_hours: Optional[float] = None
+    bag_delay_hours: Optional[float] = None
+    ticket_price: Optional[float] = None
+    ancillary_fee: Optional[float] = None
     original_class: str = ""
     downgraded_class: str = ""
-    original_class_price: float | None = None
-    downgraded_class_price: float | None = None
+    original_class_price: Optional[float] = None
+    downgraded_class_price: Optional[float] = None
     payment_method: str = ""
     accepted_alternative: bool = False
     alternative_type: str = ""
@@ -48,17 +49,17 @@ class ClassifierOutput:
     flight_date: str = ""
     airline_name: str = ""
     flight_number: str = ""
-    key_facts: list[str] = field(default_factory=list)
+    key_facts: List[str] = field(default_factory=list)
     raw_description: str = ""
 
 
 @dataclass
 class JudgeVerdict:
     approved: bool = True
-    issues_found: list[str] = field(default_factory=list)
+    issues_found: List[str] = field(default_factory=list)
     corrections: dict = field(default_factory=dict)
     override_decision: str = ""
-    override_reasons: list[str] = field(default_factory=list)
+    override_reasons: List[str] = field(default_factory=list)
     confidence_adjustment: str = ""
     explanation: str = ""
 
@@ -69,7 +70,7 @@ class PipelineResult:
     specialist_decision: dict = field(default_factory=dict)
     judge_verdict: JudgeVerdict = field(default_factory=JudgeVerdict)
     final_decision: dict = field(default_factory=dict)
-    pipeline_log: list[str] = field(default_factory=list)
+    pipeline_log: List[str] = field(default_factory=list)
 
 
 # ── LLM 1: CLASSIFIER ───────────────────────────────────────────────────────
@@ -147,7 +148,10 @@ def run_classifier(
         ("human", "{input}"),
     ])
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.0)
+    llm_model = os.getenv("OPENAI_CLASSIFIER_MODEL", "gpt-5-nano")
+    _b, _blue, _r = "\033[1m", "\033[94m", "\033[0m"
+    print(f"{_blue}{_b}[CLASSIFIER] Model: {llm_model}{_r}", flush=True)
+    llm = ChatOpenAI(model=llm_model, temperature=0.0)
     chain = prompt | llm | StrOutputParser()
     raw = chain.invoke({"input": user_input})
 
@@ -305,7 +309,10 @@ def run_judge(classifier_output: ClassifierOutput, specialist_decision: dict) ->
         ("human", "Please review this decision and provide your verdict."),
     ])
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.0)
+    llm_model = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
+    _b, _magenta, _r = "\033[1m", "\033[95m", "\033[0m"
+    print(f"{_magenta}{_b}[JUDGE] Model: {llm_model}{_r}", flush=True)
+    llm = ChatOpenAI(model=llm_model, temperature=0.0)
     chain = prompt | llm | StrOutputParser()
     raw = chain.invoke({"case_facts": case_facts, "decision_json": decision_json})
 

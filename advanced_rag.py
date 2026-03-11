@@ -12,6 +12,7 @@ Demonstrates:
   - Retrieval Dashboard: Show what context was retrieved with scores
 """
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -259,10 +260,8 @@ def _rerank_chunks(
     client = OpenAI()
 
     texts_to_embed = [query] + [c.content[:500] for c in chunks]
-    response = client.embeddings.create(
-        input=texts_to_embed,
-        model="text-embedding-3-small",
-    )
+    model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    response = client.embeddings.create(input=texts_to_embed, model=model)
     embeddings = [d.embedding for d in response.data]
     query_emb = embeddings[0]
     chunk_embs = embeddings[1:]

@@ -15,6 +15,7 @@ and also exported to an Excel spreadsheet (for human review).
 
 import hashlib
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -61,10 +62,8 @@ def _hash_inputs(
 def _get_embedding(text: str) -> list[float]:
     from openai import OpenAI
     client = OpenAI()
-    response = client.embeddings.create(
-        input=text,
-        model="text-embedding-3-small",
-    )
+    model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    response = client.embeddings.create(input=text, model=model)
     return response.data[0].embedding
 
 
@@ -88,6 +87,8 @@ class DecisionCache:
             self.entries = []
 
     def _save(self):
+        n = len(self.entries)
+        print(f"[LOG] Cache save: writing JSON to {self.cache_path.name} ({n} entries).", flush=True)
         self.cache_path.write_text(
             json.dumps(self.entries, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -95,16 +96,22 @@ class DecisionCache:
         self._export_excel()
 
     def _export_excel(self):
-        from openpyxl import Workbook
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        except ImportError:
+            # Excel export optional; JSON cache still works. Install openpyxl for Excel log.
+            return
 
+        n = len(self.entries)
+        print(f"[LOG] Excel export: writing {EXCEL_FILE.name} ({n} rows).", flush=True)
         wb = Workbook()
         ws = wb.active
         ws.title = "Refund Decisions"
 
         headers = [
             "No", "Date/Time", "Case Type", "Flight Type", "Ticket Type",
-            "Payment Method", "Description", "Decision", "Confidence",
+            "Payment Method", "Accepted Alternative", "Description", "Decision", "Confidence",
             "Analysis Steps", "Reasons", "Applicable Regulations",
             "Refund Type", "Refund Payment", "Refund Timeline",
             "Passenger Action Items",
@@ -145,6 +152,7 @@ class DecisionCache:
                 entry.get("flight_type", ""),
                 entry.get("ticket_type", ""),
                 entry.get("payment_method", ""),
+                entry.get("accepted_alternative", ""),
                 entry.get("description_preview", ""),
                 result.get("decision", ""),
                 result.get("confidence", ""),
@@ -162,13 +170,13 @@ class DecisionCache:
                 cell.alignment = Alignment(wrap_text=True, vertical="top")
                 cell.border = thin_border
 
-            decision_cell = ws.cell(row=row_idx, column=8)
+            decision_cell = ws.cell(row=row_idx, column=9)
             fill = decision_fills.get(result.get("decision", ""))
             if fill:
                 decision_cell.fill = fill
                 decision_cell.font = Font(bold=True)
 
-        col_widths = [5, 18, 22, 18, 15, 15, 40, 12, 12, 50, 40, 40, 30, 25, 25, 40]
+        col_widths = [5, 18, 22, 18, 15, 15, 28, 40, 12, 12, 50, 40, 40, 30, 25, 25, 40]
         for col_idx, width in enumerate(col_widths, 1):
             ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = width
 
@@ -176,7 +184,7 @@ class DecisionCache:
         ws.freeze_panes = "A2"
 
         wb.save(str(EXCEL_FILE))
-        print(f"[CACHE] 📊 Excel log updated: {EXCEL_FILE.name} ({len(self.entries)} rows)")
+        print(f"[CACHE] 📊 Excel log updated: {EXCEL_FILE.name} ({len(self.entries)} rows)", flush=True)
 
     def lookup(
         self,
@@ -198,17 +206,19 @@ class DecisionCache:
             case_type, flight_type, ticket_type,
             payment_method, accepted_alternative, description,
         )
-
+        short_hash = input_hash[:12] if input_hash else "?"
+        print("[LOG] Cache: checking exact match (by input hash)...", flush=True)
         # Level 1: exact match
         for entry in self.entries:
             if entry.get("hash") == input_hash:
-                print(f"[CACHE] ✅ Exact hit — returning cached decision (saved full LLM call)")
+                print(f"[CACHE] ✅ Exact hit — returning cached decision (saved full LLM call)", flush=True)
                 return entry["result"], "exact_hit"
+        print("[LOG] Cache exact: miss. Checking cache semantic (embedding + similarity)...", flush=True)
 
         # Level 2: semantic similarity on description
         if not description.strip():
+            print("[LOG] Cache semantic: skipped (no description) — miss.", flush=True)
             return None, "miss"
-
         query_embedding = _get_embedding(description)
 
         best_sim = 0.0
@@ -217,16 +227,17 @@ class DecisionCache:
             emb = entry.get("embedding")
             if not emb:
                 continue
+            if len(emb) != len(query_embedding):
+                continue  # different embedding model (e.g. small vs large)
             sim = _cosine_similarity(query_embedding, emb)
             if sim > best_sim:
                 best_sim = sim
                 best_entry = entry
 
         if best_entry and best_sim >= SEMANTIC_THRESHOLD:
-            print(f"[CACHE] 🔍 Semantic hit — similarity {best_sim:.3f} ≥ {SEMANTIC_THRESHOLD} (saved LLM call)")
+            print(f"[CACHE] 🔍 Semantic hit — similarity {best_sim:.3f} ≥ {SEMANTIC_THRESHOLD} (saved LLM call)", flush=True)
             return best_entry["result"], "semantic_hit"
-
-        print(f"[CACHE] ❌ Miss — best similarity {best_sim:.3f} < {SEMANTIC_THRESHOLD}")
+        print(f"[LOG] Cache semantic: miss (best_sim={best_sim:.3f} < {SEMANTIC_THRESHOLD}).", flush=True)
         return None, "miss"
 
     def store(
@@ -244,7 +255,8 @@ class DecisionCache:
             case_type, flight_type, ticket_type,
             payment_method, accepted_alternative, description,
         )
-
+        short_hash = input_hash[:12] if input_hash else "?"
+        print(f"[LOG] Cache store: adding entry hash={short_hash}... (JSON + Excel).", flush=True)
         embedding = _get_embedding(description) if description.strip() else []
 
         entry = {
@@ -261,7 +273,7 @@ class DecisionCache:
         }
         self.entries.append(entry)
         self._save()
-        print(f"[CACHE] 💾 Stored decision — cache now has {len(self.entries)} entries.")
+        print(f"[CACHE] 💾 Stored decision — cache now has {len(self.entries)} entries.", flush=True)
 
     @property
     def stats(self) -> dict:
@@ -269,6 +281,130 @@ class DecisionCache:
             "total_entries": len(self.entries),
             "cache_file": str(self.cache_path),
         }
+
+    def import_from_excel(
+        self,
+        excel_path: Optional[Path] = None,
+        *,
+        compute_embeddings: bool = True,
+    ) -> tuple[int, int]:
+        """
+        Seed the cache from an Excel log (e.g. decision_log.xlsx).
+        Rows already in the cache (same hash) are skipped.
+        Returns (imported_count, skipped_count).
+        """
+        try:
+            from openpyxl import load_workbook
+        except ImportError:
+            print("[CACHE] Excel import requires openpyxl. Run: pip install openpyxl")
+            return 0, 0
+
+        path = excel_path or EXCEL_FILE
+        if not path.exists():
+            print(f"[CACHE] Import skipped: {path} not found.")
+            return 0, 0
+
+        wb = load_workbook(path, read_only=True, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(min_row=1, values_only=True))
+        wb.close()
+
+        if len(rows) < 2:
+            print("[CACHE] Import skipped: Excel has no data rows.")
+            return 0, 0
+
+        header = [str(c).strip() if c is not None else "" for c in rows[0]]
+        col = {h: i for i, h in enumerate(header)}
+
+        def get(row: tuple, key: str, default: str = "") -> str:
+            i = col.get(key, -1)
+            if i < 0 or i >= len(row):
+                return default
+            v = row[i]
+            return str(v).strip() if v is not None else default
+
+        def to_list(s: str) -> list:
+            if not s or not s.strip():
+                return []
+            return [x.strip() for x in s.split("\n") if x.strip()]
+
+        existing_hashes = {e.get("hash") for e in self.entries}
+        imported = 0
+        skipped = 0
+
+        for row in rows[1:]:
+            if not row:
+                continue
+            case_type = get(row, "Case Type")
+            flight_type = get(row, "Flight Type")
+            ticket_type = get(row, "Ticket Type")
+            payment_method = get(row, "Payment Method")
+            accepted_alternative = get(row, "Accepted Alternative")
+            description = get(row, "Description")
+            if not description and not case_type:
+                continue
+            input_hash = _hash_inputs(
+                case_type, flight_type, ticket_type,
+                payment_method, accepted_alternative, description,
+            )
+            if input_hash in existing_hashes:
+                skipped += 1
+                continue
+
+            analysis_steps = to_list(get(row, "Analysis Steps"))
+            reasons = to_list(get(row, "Reasons"))
+            applicable_regulations = to_list(get(row, "Applicable Regulations"))
+            passenger_action_items = to_list(get(row, "Passenger Action Items"))
+            refund_type = get(row, "Refund Type") or "N/A"
+            refund_payment = get(row, "Refund Payment") or "N/A"
+            refund_timeline = get(row, "Refund Timeline") or "N/A"
+            if refund_type == "N/A" and refund_payment == "N/A" and refund_timeline == "N/A":
+                refund_details = {}
+            else:
+                refund_details = {
+                    "refund_type": refund_type,
+                    "payment_method": refund_payment,
+                    "timeline": refund_timeline,
+                }
+
+            result = {
+                "decision": get(row, "Decision"),
+                "confidence": get(row, "Confidence"),
+                "analysis_steps": analysis_steps,
+                "reasons": reasons,
+                "applicable_regulations": applicable_regulations,
+                "refund_details": refund_details,
+                "passenger_action_items": passenger_action_items,
+            }
+            if not result.get("decision"):
+                continue
+
+            embedding = []
+            if compute_embeddings and description.strip():
+                try:
+                    embedding = _get_embedding(description)
+                except Exception:
+                    pass
+            entry = {
+                "hash": input_hash,
+                "case_type": case_type,
+                "flight_type": flight_type,
+                "ticket_type": ticket_type,
+                "payment_method": payment_method,
+                "accepted_alternative": accepted_alternative,
+                "description_preview": description[:200],
+                "embedding": embedding,
+                "result": result,
+                "timestamp": time.time(),
+            }
+            self.entries.append(entry)
+            existing_hashes.add(input_hash)
+            imported += 1
+
+        if imported > 0:
+            self._save()
+            print(f"[CACHE] 📥 Imported {imported} rows from Excel (skipped {skipped} duplicates).")
+        return imported, skipped
 
     def clear(self):
         self.entries = []

@@ -1,6 +1,6 @@
 """Document indexer — builds and loads the vector index."""
 
-from app.config import DATA_DIR, INDEX_DIR, CHUNK_SIZE, CHUNK_OVERLAP, REQUIRED_EXTS
+from app.config import DATA_DIR, INDEX_DIR, CHUNK_SIZE, CHUNK_OVERLAP, EMBEDDING_MODEL, REQUIRED_EXTS
 
 
 def build_or_load_index():
@@ -13,7 +13,7 @@ def build_or_load_index():
     from llama_index.core.node_parser import SentenceSplitter
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+    Settings.embed_model = OpenAIEmbedding(model=EMBEDDING_MODEL)
     Settings.chunk_size = CHUNK_SIZE
     Settings.chunk_overlap = CHUNK_OVERLAP
 

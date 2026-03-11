@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: refund-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: refund_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   gradio:
     build: .
     container_name: refund-gradio
@@ -6,6 +24,11 @@ services:
       - "7861:7861"
     env_file:
       - .env
+    environment:
+      POSTGRES_HOST: postgres  # use service name when app runs in Docker
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - index-data:/app/storage
       - ./data/bilgiler:/app/data/bilgiler
@@ -29,3 +52,4 @@ services:
 volumes:
   index-data:
   django-db:
+  postgres-data:

@@ -44,7 +44,8 @@ def build_or_load_index():
     from llama_index.core.node_parser import SentenceSplitter
 
     BILGILER_DIR.mkdir(parents=True, exist_ok=True)
-    Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+    embed_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    Settings.embed_model = OpenAIEmbedding(model=embed_model)
     Settings.chunk_size = 512
     Settings.chunk_overlap = 50
 
@@ -84,16 +85,20 @@ AVAILABLE TOOLS:
 - search_regulations: Search DOT regulation documents. ALWAYS use this first to find relevant rules.
 - check_delay_threshold: Check if a flight delay is "significant" (domestic 3h / international 6h). Use for delay/schedule change cases.
 - check_baggage_threshold: Check if a baggage delay is "significant." REQUIRES flight duration. Use for baggage cases.
-- calculate_refund: Compute exact refund amounts. Use when you know the ticket price or fare difference.
+- calculate_refund: Compute exact refund amounts. Use when you know the ticket price or fare difference (in USD).
+- convert_currency: Convert amounts to USD. If the passenger states amounts in another currency (EUR, TRY, GBP, etc.), call convert_currency(amount, from_currency, "USD") first, then use the USD amount everywhere.
 - calculate_refund_timeline: Compute the exact deadline date for the refund. Use when you know the payment method and event date.
 - generate_decision_letter: Create a formal refund request letter. Use ONLY after deciding APPROVED or PARTIAL.
 
+CURRENCY RULE: We always respond in US dollars (USD). If the passenger gives amounts in their own currency, use convert_currency to get USD first. All amounts in refund_details and in the decision letter must be in USD (e.g. $250.00 USD).
+
 WORKFLOW:
 1. FIRST: Call search_regulations to find the relevant DOT rules for this case type.
-2. THEN: Use the appropriate threshold checker tool (check_delay_threshold or check_baggage_threshold) if the case involves delays or baggage. TRUST the tool result — do NOT override it.
-3. THEN: Use calculate_refund if you can determine the refund amount.
-4. THEN: Use calculate_refund_timeline to determine the deadline.
-5. FINALLY: Produce your final answer as valid JSON.
+2. If the passenger stated a refund/ticket amount in a non-USD currency, call convert_currency(amount, their_currency, "USD") and use the converted amount from then on.
+3. THEN: Use the appropriate threshold checker tool (check_delay_threshold or check_baggage_threshold) if the case involves delays or baggage. TRUST the tool result — do NOT override it.
+4. THEN: Use calculate_refund with amounts in USD (use the result from convert_currency if applicable).
+5. THEN: Use calculate_refund_timeline to determine the deadline.
+6. FINALLY: Produce your final answer as valid JSON. refund_details.refund_amount must be in USD (e.g. "$250.00 USD").
 
 CRITICAL: When a tool tells you the delay is NOT significant or the bag is NOT significantly delayed, the decision MUST be DENIED. Do NOT override tool results with your own reasoning.
 
@@ -106,7 +111,7 @@ OUTPUT FORMAT: Your FINAL answer must be valid JSON with this schema:
   "applicable_regulations": ["regulation 1", ...],
   "refund_details": {{
     "refund_type": "...",
-    "refund_amount": "...",
+    "refund_amount": "... (always in USD, e.g. $250.00 USD)",
     "payment_method": "...",
     "timeline": "..."
   }} or null if DENIED,
@@ -126,7 +131,8 @@ def build_agent(index):
     from refund_tools import get_all_tools
 
     tools = get_all_tools(index)
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
+    llm_model = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
+    llm = ChatOpenAI(model=llm_model, temperature=0.1)
 
     agent = create_react_agent(
         llm,
