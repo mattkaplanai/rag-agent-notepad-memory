@@ -1,6 +1,6 @@
 """Analyst agent — checks thresholds and calculates refunds."""
 
-from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import create_react_agent
 
 from app.config import LLM_MODEL, SPECIALIST_TEMPERATURE
@@ -13,7 +13,7 @@ from app.tools.timeline_calculator import calculate_refund_timeline
 
 def build_analyst():
     """Build the Analyst agent with threshold + calculator tools."""
-    llm = ChatOpenAI(model=LLM_MODEL, temperature=SPECIALIST_TEMPERATURE)
+    llm = ChatAnthropic(model=LLM_MODEL, temperature=SPECIALIST_TEMPERATURE)
     tools = [check_delay_threshold, check_baggage_threshold, calculate_refund, calculate_refund_timeline]
     return create_react_agent(llm, tools, prompt=ANALYST_PROMPT)
 

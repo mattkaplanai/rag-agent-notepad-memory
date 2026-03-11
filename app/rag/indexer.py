@@ -1,6 +1,10 @@
-"""Document indexer — builds and loads the vector index."""
+"""Document indexer -- builds and loads the vector index."""
 
-from app.config import DATA_DIR, INDEX_DIR, CHUNK_SIZE, CHUNK_OVERLAP, EMBEDDING_MODEL, REQUIRED_EXTS
+import logging
+
+from app.config import DATA_DIR, INDEX_DIR, CHUNK_SIZE, CHUNK_OVERLAP, EMBEDDING_MODEL, EMBEDDING_TIMEOUT, REQUIRED_EXTS
+
+logger = logging.getLogger(__name__)
 
 
 def build_or_load_index():
@@ -13,7 +17,7 @@ def build_or_load_index():
     from llama_index.core.node_parser import SentenceSplitter
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    Settings.embed_model = OpenAIEmbedding(model=EMBEDDING_MODEL)
+    Settings.embed_model = OpenAIEmbedding(model=EMBEDDING_MODEL, timeout=EMBEDDING_TIMEOUT)
     Settings.chunk_size = CHUNK_SIZE
     Settings.chunk_overlap = CHUNK_OVERLAP
 
@@ -21,7 +25,7 @@ def build_or_load_index():
         try:
             ctx = StorageContext.from_defaults(persist_dir=str(INDEX_DIR))
             index = load_index_from_storage(ctx)
-            print(f"[RAG] Index loaded from storage/ ({CHUNK_SIZE}-token chunks)")
+            logger.info("Index loaded from storage/ (%d-token chunks).", CHUNK_SIZE)
             return index
         except Exception:
             pass
@@ -33,12 +37,12 @@ def build_or_load_index():
     )
     documents = reader.load_data()
     if not documents:
-        print("[RAG] No documents found in data/bilgiler/")
+        logger.warning("No documents found in data/bilgiler/.")
         return None
 
-    print(f"[RAG] Building index: {len(documents)} documents (chunk_size={CHUNK_SIZE})...")
+    logger.info("Building index: %d documents (chunk_size=%d)...", len(documents), CHUNK_SIZE)
     node_parser = SentenceSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
     index = VectorStoreIndex.from_documents(documents, transformations=[node_parser])
     index.storage_context.persist(persist_dir=str(INDEX_DIR))
-    print("[RAG] Index ready.")
+    logger.info("Index ready.")
     return index

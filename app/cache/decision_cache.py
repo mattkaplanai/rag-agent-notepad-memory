@@ -5,21 +5,16 @@ Level 1: exact hash match. Level 2: semantic embedding similarity.
 
 import hashlib
 import json
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
+from app.config import CACHE_FILE, EMBEDDING_MODEL, EMBEDDING_TIMEOUT, EXCEL_FILE, SEMANTIC_THRESHOLD
+from app.utils import cosine_similarity
 
-from app.config import CACHE_FILE, EMBEDDING_MODEL, EXCEL_FILE, SEMANTIC_THRESHOLD
-
-
-def _cosine_similarity(a, b):
-    a_arr, b_arr = np.array(a), np.array(b)
-    dot = np.dot(a_arr, b_arr)
-    norm = np.linalg.norm(a_arr) * np.linalg.norm(b_arr)
-    return float(dot / norm) if norm > 0 else 0.0
+logger = logging.getLogger(__name__)
 
 
 def _hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description):
@@ -29,7 +24,7 @@ def _hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_a
 
 def _get_embedding(text):
     from openai import OpenAI
-    client = OpenAI()
+    client = OpenAI(timeout=EMBEDDING_TIMEOUT)
     response = client.embeddings.create(input=text, model=EMBEDDING_MODEL)
     return response.data[0].embedding
 
@@ -45,7 +40,7 @@ class DecisionCache:
             try:
                 data = json.loads(self.cache_path.read_text(encoding="utf-8"))
                 self.entries = data if isinstance(data, list) else []
-                print(f"[CACHE] Loaded {len(self.entries)} cached decisions.")
+                logger.info("Loaded %d cached decisions.", len(self.entries))
             except Exception:
                 self.entries = []
 
@@ -117,15 +112,20 @@ class DecisionCache:
         wb.save(str(EXCEL_FILE))
 
     def lookup(self, case_type, flight_type, ticket_type, payment_method, accepted_alternative, description):
+        """Look up a decision. Returns (result, status, query_embedding).
+
+        The query_embedding is returned so callers can pass it to store()
+        without re-computing it (avoids a redundant OpenAI API call).
+        """
         input_hash = _hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description)
 
         for entry in self.entries:
             if entry.get("hash") == input_hash:
-                print("[CACHE] ✅ Exact hit")
-                return entry["result"], "exact_hit"
+                logger.info("Cache exact hit.")
+                return entry["result"], "exact_hit", None
 
         if not description.strip():
-            return None, "miss"
+            return None, "miss", None
 
         query_embedding = _get_embedding(description)
         best_sim, best_entry = 0.0, None
@@ -133,30 +133,32 @@ class DecisionCache:
             emb = entry.get("embedding")
             if not emb:
                 continue
-            sim = _cosine_similarity(query_embedding, emb)
+            sim = cosine_similarity(query_embedding, emb)
             if sim > best_sim:
                 best_sim = sim
                 best_entry = entry
 
         if best_entry and best_sim >= SEMANTIC_THRESHOLD:
-            print(f"[CACHE] 🔍 Semantic hit — similarity {best_sim:.3f}")
-            return best_entry["result"], "semantic_hit"
+            logger.info("Cache semantic hit (similarity %.3f).", best_sim)
+            return best_entry["result"], "semantic_hit", query_embedding
 
-        print(f"[CACHE] ❌ Miss — best similarity {best_sim:.3f}")
-        return None, "miss"
+        logger.info("Cache miss (best similarity %.3f).", best_sim)
+        return None, "miss", query_embedding
 
-    def store(self, case_type, flight_type, ticket_type, payment_method, accepted_alternative, description, result):
+    def store(self, case_type, flight_type, ticket_type, payment_method, accepted_alternative, description, result, embedding=None):
+        """Store a decision. Pass embedding from lookup() to avoid redundant API call."""
         input_hash = _hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description)
-        embedding = _get_embedding(description) if description.strip() else []
+        if embedding is None and description.strip():
+            embedding = _get_embedding(description)
 
         self.entries.append({
             "hash": input_hash, "case_type": case_type, "flight_type": flight_type,
             "ticket_type": ticket_type, "payment_method": payment_method,
             "accepted_alternative": accepted_alternative, "description_preview": description[:200],
-            "embedding": embedding, "result": result, "timestamp": time.time(),
+            "embedding": embedding or [], "result": result, "timestamp": time.time(),
         })
         self._save()
-        print(f"[CACHE] 💾 Stored — cache now has {len(self.entries)} entries.")
+        logger.info("Stored decision (cache now has %d entries).", len(self.entries))
 
     @property
     def stats(self):
@@ -167,4 +169,4 @@ class DecisionCache:
         self._save()
         if EXCEL_FILE.exists():
             EXCEL_FILE.unlink()
-        print("[CACHE] 🗑️ Cleared.")
+        logger.info("Cache cleared.")

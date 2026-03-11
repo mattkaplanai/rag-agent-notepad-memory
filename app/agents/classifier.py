@@ -2,11 +2,11 @@
 
 import json
 
-from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-from app.config import LLM_MODEL, CLASSIFIER_TEMPERATURE
+from app.config import CLASSIFIER_MODEL, CLASSIFIER_TEMPERATURE
 from app.prompts.classifier import CLASSIFIER_PROMPT
 from app.models.schemas import ClassifierOutput
 
@@ -36,20 +36,14 @@ def run_classifier(
         ("human", "{input}"),
     ])
 
-    llm = ChatOpenAI(model=LLM_MODEL, temperature=CLASSIFIER_TEMPERATURE)
+    llm = ChatAnthropic(model=CLASSIFIER_MODEL, temperature=CLASSIFIER_TEMPERATURE)
     chain = prompt | llm | StrOutputParser()
     raw = chain.invoke({"input": user_input})
 
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-
+    from app.utils import clean_llm_json
     try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
+        data = clean_llm_json(raw)
+    except (json.JSONDecodeError, ValueError):
         data = {}
 
     return ClassifierOutput(

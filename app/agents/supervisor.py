@@ -61,16 +61,10 @@ def run_multi_agent(
     )
 
     # Parse Writer's JSON
-    cleaned = writer_output.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-
+    from app.utils import clean_llm_json
     try:
-        decision = json.loads(cleaned)
-    except json.JSONDecodeError:
+        decision = clean_llm_json(writer_output)
+    except (json.JSONDecodeError, ValueError):
         decision = {
             "decision": "ERROR", "confidence": "LOW",
             "analysis_steps": ["Writer failed to produce valid JSON."],

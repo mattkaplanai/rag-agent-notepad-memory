@@ -8,8 +8,9 @@ from pathlib import Path
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from app.config import EMBEDDING_MODEL, VECTOR_SEARCH_K, BM25_SEARCH_K
+from app.config import EMBEDDING_MODEL, EMBEDDING_TIMEOUT, VECTOR_SEARCH_K, BM25_SEARCH_K
 from app.models.schemas import RetrievedChunk, RetrievalResult
+from app.utils import cosine_similarity
 
 
 def _extract_source(node) -> str:
@@ -22,13 +23,6 @@ def _tokenize(text: str) -> list[str]:
     return re.findall(r"\w+", text.lower())
 
 
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    a_arr, b_arr = np.array(a), np.array(b)
-    dot = np.dot(a_arr, b_arr)
-    norm = np.linalg.norm(a_arr) * np.linalg.norm(b_arr)
-    return float(dot / norm) if norm > 0 else 0.0
-
-
 def _reciprocal_rank_fusion(ranked_lists, k=60):
     scores = {}
     for ranked_list in ranked_lists:
@@ -37,7 +31,16 @@ def _reciprocal_rank_fusion(ranked_lists, k=60):
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
 
-def _get_all_nodes(index):
+# Cache the docstore nodes so we don't rescan on every query (#7)
+_bm25_cache: dict = {}
+
+
+def _get_all_nodes_cached(index):
+    """Get all nodes from docstore, cached by index id to avoid repeated scans."""
+    index_id = id(index)
+    if index_id in _bm25_cache:
+        return _bm25_cache[index_id]
+
     try:
         docstore = index.storage_context.docstore
         nodes = []
@@ -47,6 +50,7 @@ def _get_all_nodes(index):
             if hasattr(node, "metadata") and node.metadata:
                 source = Path(node.metadata.get("file_name", "unknown")).name
             nodes.append({"content": content, "source": source, "id": node_id})
+        _bm25_cache[index_id] = nodes
         return nodes
     except Exception:
         return []
@@ -57,14 +61,14 @@ def _rerank_chunks(query, chunks):
         return chunks
 
     from openai import OpenAI
-    client = OpenAI()
+    client = OpenAI(timeout=EMBEDDING_TIMEOUT)
     texts_to_embed = [query] + [c.content[:500] for c in chunks]
     response = client.embeddings.create(input=texts_to_embed, model=EMBEDDING_MODEL)
     embeddings = [d.embedding for d in response.data]
     query_emb = embeddings[0]
 
     for chunk, emb in zip(chunks, embeddings[1:]):
-        chunk.rerank_score = _cosine_similarity(query_emb, emb)
+        chunk.rerank_score = cosine_similarity(query_emb, emb)
 
     chunks.sort(key=lambda c: c.rerank_score, reverse=True)
     return chunks
@@ -97,8 +101,8 @@ def hybrid_search(index, query, top_k=8, vector_k=None, bm25_k=None):
         vector_chunks[chunk_id] = chunk
         vector_ranked.append((chunk_id, chunk))
 
-    # BM25 search
-    all_nodes = _get_all_nodes(index)
+    # BM25 search (uses cached nodes)
+    all_nodes = _get_all_nodes_cached(index)
     bm25_chunks = {}
     bm25_ranked = []
 
@@ -148,7 +152,7 @@ def hybrid_search(index, query, top_k=8, vector_k=None, bm25_k=None):
 
 def format_retrieval_dashboard(result):
     lines = [
-        "## 📡 Retrieval Dashboard", "",
+        "## Retrieval Dashboard", "",
         f"**Query:** {result.query[:100]}{'...' if len(result.query) > 100 else ''}",
         "", "| Metric | Count |", "|--------|-------|",
         f"| Vector search results | {result.vector_count} |",
@@ -156,16 +160,16 @@ def format_retrieval_dashboard(result):
         f"| After fusion (RRF) | {result.hybrid_count} |",
         f"| Final (re-ranked) | {len(result.chunks)} |",
         f"| Re-ranking applied | {'Yes' if result.reranked else 'No'} |",
-        "", "### 📚 Sources Used", "",
+        "", "### Sources Used", "",
     ]
     for citation in result.citation_summary:
-        lines.append(f"- **{citation['source']}** — relevance: {citation['relevance']:.3f} ({citation['method']})")
+        lines.append(f"- **{citation['source']}** -- relevance: {citation['relevance']:.3f} ({citation['method']})")
 
-    lines += ["", "### 📄 Retrieved Chunks", ""]
+    lines += ["", "### Retrieved Chunks", ""]
     for i, chunk in enumerate(result.chunks, 1):
         preview = chunk.content[:200].replace("\n", " ")
-        badge = {"vector": "🔵", "bm25": "🟡", "hybrid (vector + bm25)": "🟢"}.get(chunk.retrieval_method, "⚪")
-        lines.append(f"**{i}.** {badge} rerank: {chunk.rerank_score:.3f} — *{chunk.source_file}*")
+        badge = {"vector": "[V]", "bm25": "[B]", "hybrid (vector + bm25)": "[H]"}.get(chunk.retrieval_method, "[?]")
+        lines.append(f"**{i}.** {badge} rerank: {chunk.rerank_score:.3f} -- *{chunk.source_file}*")
         lines.append(f"> {preview}...")
         lines.append("")
 

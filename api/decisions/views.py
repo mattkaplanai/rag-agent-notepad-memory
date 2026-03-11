@@ -1,10 +1,13 @@
 """API views for the refund decision system."""
 
+import logging
 import time
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+
+logger = logging.getLogger(__name__)
 
 from .models import RefundDecision
 from .serializers import (
@@ -22,7 +25,7 @@ def _get_pipeline():
         from app.agents.analyst import build_analyst
         from app.agents.writer import build_writer
 
-        print("[API] Building document index and agents...")
+        logger.info("Building document index and agents...")
         index = build_or_load_index()
         _get_pipeline._agents = {
             'index': index,
@@ -30,7 +33,7 @@ def _get_pipeline():
             'analyst': build_analyst(),
             'writer': build_writer(),
         }
-        print("[API] Pipeline ready.")
+        logger.info("Pipeline ready.")
     return _get_pipeline._agents
 
 

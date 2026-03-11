@@ -1,6 +1,6 @@
 """Writer agent — drafts the final decision and formal letter."""
 
-from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import create_react_agent
 
 from app.config import LLM_MODEL, SPECIALIST_TEMPERATURE
@@ -10,7 +10,7 @@ from app.tools.letter import generate_decision_letter
 
 def build_writer():
     """Build the Writer agent with the letter generator tool."""
-    llm = ChatOpenAI(model=LLM_MODEL, temperature=SPECIALIST_TEMPERATURE)
+    llm = ChatAnthropic(model=LLM_MODEL, temperature=SPECIALIST_TEMPERATURE)
     return create_react_agent(llm, [generate_decision_letter], prompt=WRITER_PROMPT)
 
 

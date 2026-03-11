@@ -22,15 +22,21 @@ EXCEL_FILE = PROJECT_ROOT / "decision_log.xlsx"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY not found. Add it to .env")
+    raise ValueError("OPENAI_API_KEY not found. Add it to .env (required for embeddings)")
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
-# ── Model Settings ───────────────────────────────────────────────────────────
-# Override via .env: OPENAI_LLM_MODEL, OPENAI_CLASSIFIER_MODEL, OPENAI_RESEARCHER_MODEL, OPENAI_EMBEDDING_MODEL
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+if not ANTHROPIC_API_KEY:
+    raise ValueError("ANTHROPIC_API_KEY not found. Add it to .env")
+os.environ["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
 
-LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
-CLASSIFIER_MODEL = os.getenv("OPENAI_CLASSIFIER_MODEL", "gpt-5-nano")
-RESEARCHER_MODEL = os.getenv("OPENAI_RESEARCHER_MODEL", "gpt-4o")
+# ── Model Settings ───────────────────────────────────────────────────────────
+# LLMs: Anthropic Claude — override via .env: ANTHROPIC_LLM_MODEL, ANTHROPIC_CLASSIFIER_MODEL, ANTHROPIC_RESEARCHER_MODEL
+# Embeddings: OpenAI — override via .env: OPENAI_EMBEDDING_MODEL
+
+CLASSIFIER_MODEL = os.getenv("ANTHROPIC_CLASSIFIER_MODEL", "claude-haiku-4-5-20251001")
+RESEARCHER_MODEL = os.getenv("ANTHROPIC_RESEARCHER_MODEL", "claude-sonnet-4-6")
+LLM_MODEL = os.getenv("ANTHROPIC_LLM_MODEL", "claude-sonnet-4-6")  # analyst, writer, judge
 EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 CLASSIFIER_TEMPERATURE = 0.0
 SPECIALIST_TEMPERATURE = 0.1
@@ -48,6 +54,7 @@ REQUIRED_EXTS = [".pdf", ".docx", ".doc", ".txt", ".md"]
 # ── Cache Settings ───────────────────────────────────────────────────────────
 
 SEMANTIC_THRESHOLD = 0.90
+EMBEDDING_TIMEOUT = int(os.getenv("EMBEDDING_TIMEOUT", "30"))
 
 # ── UI Settings ──────────────────────────────────────────────────────────────
 

@@ -1,124 +1,175 @@
-# RAG Projesi: Doküman Tabanlı Soru-Cevap
+# ✈️ Airlines Refund — Multi-Agent Decision System
 
-Bu proje, **bilgiler** klasöründeki PDF, Word ve metin dosyalarını kullanarak soru-cevap yapan bir RAG (Retrieval-Augmented Generation) uygulamasıdır.
+An AI-powered airline refund decision system using a multi-agent pipeline, RAG over DOT regulations, a Django REST API, and a Gradio web UI — all running in Docker.
 
-## Çalışma Mantığı
+## Architecture
 
-1. **Giriş:** Kullanıcı Gradio arayüzündeki soru kutusuna sorusunu yazar.
-2. **Arama:** LlamaIndex, dosyalardaki ilgili parçaları vektör indeksi üzerinden bulur.
-3. **Birleştirme:** LangChain, soruyu ve bulunan metni OpenAI’a ileten zinciri yönetir.
-4. **Sonuç:** OpenAI cevabı üretir ve Gradio ekranındaki cevap alanında gösterilir.
+```
+User Input
+    │
+    ▼
+🔵 Classifier        — Extracts structured case metadata from the description
+    │
+    ▼
+🟣 Supervisor
+    ├── 📚 Researcher  — Hybrid RAG search over DOT regulations (vector + BM25)
+    ├── 🔢 Analyst     — Applies rules, calculates refund amounts & timelines
+    └── ✍️ Writer      — Drafts formal refund request letter
+    │
+    ▼
+🔴 Judge             — Validates decision, overrides if regulations are violated
+    │
+    ▼
+✅ Final Decision     — APPROVED / DENIED / PARTIAL + formal letter
+```
 
-## Kurulum
+**Cache layer:** Exact-match → Semantic similarity (cosine ≥ 0.90) → Full pipeline
 
-### 1. Sanal ortam (önerilir)
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Agents | LangGraph + LangChain |
+| RAG | LlamaIndex (hybrid: vector + BM25) |
+| LLM | OpenAI (`gpt-4.1-mini`, `gpt-5-mini`, `gpt-5-nano`) |
+| Embeddings | `text-embedding-3-large` (3072 dims) |
+| Web UI | Gradio |
+| REST API | Django REST Framework |
+| Database | PostgreSQL 16 |
+| Flight Data | AviationStack API |
+| Infra | Docker Compose |
+
+## Agent Tools
+
+| Tool | Description |
+|---|---|
+| `search_regulations` | Hybrid RAG search over DOT regulation documents |
+| `check_delay_threshold` | Checks if a delay meets DOT refund thresholds |
+| `check_baggage_threshold` | Checks baggage delay/loss refund thresholds |
+| `calculate_refund` | Calculates refund amount based on case type |
+| `calculate_refund_timeline` | Determines required refund timeline by payment method |
+| `generate_decision_letter` | Drafts a formal refund request letter |
+
+## Knowledge Base
+
+Documents in `data/bilgiler/` (auto-indexed on first run):
+
+- `14 CFR Part 259` — US airline consumer protection regulations
+- `2024-07177.pdf` — USDOT Automatic Refund Rule (2024)
+- `Airline_Customer_Service_Commitments` — Airline commitments doc
+- `USDOT_automatic_refund_rule.txt` — Refund rule summary
+- `USDOT_aviation_refunds.txt` — Aviation consumer protection refunds
+
+## Quick Start
+
+### Prerequisites
+- Docker Desktop
+- OpenAI API key
+- (Optional) AviationStack API key
+
+### 1. Clone & configure
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+git clone https://github.com/mattkaplanai/rag-agent-notepad-memory.git
+cd rag-agent-notepad-memory
+cp .env.example .env   # then fill in your keys
 ```
 
-### 2. Bağımlılıkları yükle
+`.env` variables:
+
+```env
+OPENAI_API_KEY=sk-proj-...
+OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+OPENAI_LLM_MODEL=gpt-4.1-mini
+OPENAI_CLASSIFIER_MODEL=gpt-5-nano
+OPENAI_RESEARCHER_MODEL=gpt-5-mini
+
+AVIATIONSTACK_ACCESS_KEY=your_key_here
+
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=refund_db
+```
+
+### 2. Run with Docker
 
 ```bash
-pip install -r requirements.txt
+docker compose up --build
 ```
 
-### 3. OpenAI API anahtarı
+| Service | URL |
+|---|---|
+| Gradio UI | http://localhost:7861 |
+| Django REST API | http://localhost:8000 |
+| PostgreSQL | localhost:5432 |
 
-- [OpenAI API Keys](https://platform.openai.com/api-keys) sayfasından anahtar alın.
-- Proje klasöründe `.env` dosyası oluşturun (`.env.example` dosyası örnektir):
+The vector index builds automatically on first start (takes ~1-2 min while calling OpenAI embeddings API).
 
-```bash
-cp .env.example .env
-```
+> **Note:** If you change `OPENAI_EMBEDDING_MODEL`, you must clear the old index or you'll get a dimension mismatch error:
+> ```bash
+> docker compose run --rm gradio python scripts/clear_decision_data.py
+> # then remove storage volume and restart
+> docker compose down -v && docker compose up --build
+> ```
 
-- `.env` içine anahtarınızı yazın:
-
-```
-OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-### 4. (İsteğe bağlı) PostgreSQL — Karar önbelleği
-
-Multi-agent refund uygulaması (`multi_agent.py`), cache’e ek olarak PostgreSQL’de kararları saklayabilir (exact + semantic hit, maliyet düşürme). Kullanmak için:
-
-1. PostgreSQL kurun (örn. `brew install postgresql@16` veya Docker: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`).
-2. Veritabanı oluşturun: `createdb refund_db` (veya psql ile `CREATE DATABASE refund_db;`).
-3. `.env` içine ekleyin (veya tek satır: `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/refund_db`):
-
-   ```
-   POSTGRES_HOST=localhost
-   POSTGRES_PORT=5432
-   POSTGRES_USER=postgres
-   POSTGRES_PASSWORD=postgres
-   POSTGRES_DB=refund_db
-   ```
-
-4. Uygulama açılışında tablo otomatik oluşturulur. Verileri görmek için pgAdmin veya DBeaver kullanabilirsiniz.
-
-Bu değişkenleri tanımlamazsanız uygulama sadece cache (JSON + Excel) ile çalışır; DB devre dışı kalır.
-
-### 5. Belgeleri ekleyin
-
-- **bilgiler** klasörüne PDF (`.pdf`), Word (`.docx`, `.doc`) veya metin (`.txt`, `.md`) dosyalarınızı koyun.
-- İlk çalıştırmada bu dosyalar taranıp vektör indeksine dönüştürülür; indeks `storage` klasörüne kaydedilir.
-
-## Çalıştırma
-
-**Basit RAG:** `python rag_app.py`  
-**Agent (Notepad + Bellek + Araçlar):** `python rag_agent.py`
-
-```bash
-python rag_app.py
-```
-
-Tarayıcıda açılan adres (genelde `http://127.0.0.1:7860`) üzerinden soru kutusuna yazıp “Gönder” ile cevap alabilirsiniz.
-
-## Proje Yapısı
+## Project Structure
 
 ```
-Project with Ergun/
-├── bilgiler/          # PDF, Word, .txt dosyalarınız
-├── storage/           # LlamaIndex vektör indeksi (otomatik oluşur)
-├── notepad.txt        # Agent notepad (rag_agent.py ile oluşur)
-├── long_memory.json   # Uzun süreli bellek (rag_agent.py ile oluşur)
-├── .env               # OPENAI_API_KEY (siz oluşturursunuz)
-├── .env.example       # Örnek env dosyası
-├── rag_app.py         # Basit RAG uygulaması
-├── rag_agent.py       # Agent: Notepad + Bellek + Araçlar (tool döngüsü)
-├── memory_utils.py    # Notepad ve uzun bellek okuma/yazma
-├── requirements.txt
-└── README.md
+.
+├── app/                        # Main Gradio application
+│   ├── agents/                 # Agent definitions
+│   │   ├── classifier.py       # Case metadata extractor
+│   │   ├── researcher.py       # RAG-powered regulation searcher
+│   │   ├── analyst.py          # Refund rule applier
+│   │   ├── writer.py           # Formal letter drafter
+│   │   ├── supervisor.py       # Orchestrates researcher→analyst→writer
+│   │   └── judge.py            # Final decision validator
+│   ├── tools/                  # LangChain tools
+│   │   ├── search.py           # search_regulations
+│   │   ├── check_delay.py      # check_delay_threshold
+│   │   ├── check_baggage.py    # check_baggage_threshold
+│   │   ├── refund_calculator.py# calculate_refund
+│   │   ├── timeline_calculator.py # calculate_refund_timeline
+│   │   └── letter.py           # generate_decision_letter
+│   ├── rag/
+│   │   ├── indexer.py          # Builds/loads LlamaIndex vector store
+│   │   └── retriever.py        # Hybrid search (vector + BM25)
+│   ├── cache/
+│   │   └── decision_cache.py   # Exact + semantic cache (JSON)
+│   ├── models/schemas.py       # Pydantic models
+│   ├── config.py               # Central configuration
+│   ├── ui/gradio_app.py        # Gradio interface
+│   └── main.py                 # Entry point
+├── api/                        # Django REST API
+│   ├── api_project/            # Django project settings
+│   └── decisions/              # Decisions app (endpoints)
+├── data/bilgiler/              # DOT regulation documents (PDF, TXT)
+├── storage/                    # Vector index (auto-generated, gitignored)
+├── scripts/
+│   ├── clear_decision_data.py  # Clears cache + DB (use after model change)
+│   └── download_baggage_docs.py
+├── docker-compose.yml
+├── Dockerfile
+└── requirements.txt
 ```
 
-## RAG Agent (Notepad, Bellek, Araçlar)
+## REST API
 
-`rag_agent.py` ile çalışan sürümde:
+Base URL: `http://localhost:8000`
 
-- **Kısa bellek:** Son 6 sohbet turu otomatik olarak agent’a verilir.
-- **Uzun bellek:** `remember` / `recall` araçları ile kalıcı bilgi kaydedilir ve okunur (örn. isim, tercih).
-- **Notepad:** Agent `read_notepad_tool` / `write_notepad_tool` ile notepad’i okuyup yazabilir; arayüzden de yenile/kaydet yapılır.
-- **Araçlar (tools):** `search_documents` (belgelerde arama), notepad ve bellek araçları. Agent hangi aracı ne zaman kullanacağına kendisi karar verir (tool döngüsü).
-- **Tool döngüsü:** LangChain `create_tool_calling_agent` + `AgentExecutor`: agent araç çağrıları yapar, sonuçlar geri verilir, gerekirse tekrar araç kullanır veya son cevabı üretir.
-
-## Teknolojiler
-
-- **LlamaIndex:** Belgelerin taranması ve vektör indeksine dönüştürülmesi.
-- **LangChain + OpenAI:** Soru + bulunan metin → cevap üretimi.
-- **Gradio:** Web arayüzü (soru kutusu + cevap alanı).
-
-## Notlar
-
-- İndeks ilk çalıştırmada veya **bilgiler** klasörüne yeni dosya ekledikten sonra yeniden oluşturulur (mevcut `storage` silinirse veya hata alırsanız tekrar oluşur).
-- Cevap maliyeti OpenAI kullanımına bağlıdır; `gpt-4o-mini` varsayılan modeldir, `rag_app.py` içinden değiştirilebilir.
-
-### Embedding model değişince (cache + DB temizliği)
-
-Refund akışı sırasıyla: **cache exact hit → cache semantic hit → db exact hit → db semantic hit → RAG**. Embedding modelini değiştirdiğinizde (örn. `text-embedding-3-small` → `text-embedding-3-large`) eski cache/DB kayıtları yeni modelle uyumsuz olur. Düzeni korumak için temizlik script'ini çalıştırın:
-
-```bash
-python scripts/clear_decision_data.py
+```
+GET  /decisions/          — List all decisions
+POST /decisions/          — Submit a new case
+GET  /decisions/<id>/     — Get decision by ID
 ```
 
-Bu script `decision_cache.json` dosyasını boşaltır ve PostgreSQL `refund_decisions` tablosunu truncate eder. Sonrasında tüm yeni kayıtlar seçili embedding modeliyle tutarlı şekilde yazılır.
+## Case Types Supported
+
+- Flight Cancellation
+- Schedule Change / Significant Delay
+- Downgrade to Lower Class
+- Baggage Lost or Delayed
+- Ancillary Service Not Provided
+- 24-Hour Cancellation (within 24h of booking)

@@ -1,11 +1,13 @@
 """
-Airlines Refund Decision Maker — Main Entry Point
+Airlines Refund Decision Maker -- Main Entry Point
 
 Usage:
     python -m app.main
     # or
     python app/main.py
 """
+
+import logging
 
 from app.config import SERVER_HOST, SERVER_PORT
 from app.rag.indexer import build_or_load_index
@@ -14,21 +16,28 @@ from app.agents.analyst import build_analyst
 from app.agents.writer import build_writer
 from app.ui.gradio_app import create_app
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
 
 def main():
-    print("[APP] Airlines Refund Decision Maker")
-    print("[APP] Building document index...")
+    logger.info("Airlines Refund Decision Maker")
+    logger.info("Building document index...")
     index = build_or_load_index()
 
-    print("[APP] Building worker agents...")
+    logger.info("Building worker agents...")
     researcher_agent = build_researcher(index)
     analyst_agent = build_analyst()
     writer_agent = build_writer()
 
-    print("[APP] Creating UI...")
+    logger.info("Creating UI...")
     app = create_app(index, researcher_agent, analyst_agent, writer_agent)
 
-    print(f"[APP] Ready. Launching on {SERVER_HOST}:{SERVER_PORT}")
+    logger.info("Ready. Launching on %s:%d", SERVER_HOST, SERVER_PORT)
     app.launch(server_name=SERVER_HOST, server_port=SERVER_PORT)
 
 

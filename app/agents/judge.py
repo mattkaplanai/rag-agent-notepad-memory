@@ -2,7 +2,7 @@
 
 import json
 
-from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
@@ -36,20 +36,14 @@ def run_judge(classifier_output: ClassifierOutput, specialist_decision: dict) ->
         ("human", "Please review this decision and provide your verdict."),
     ])
 
-    llm = ChatOpenAI(model=LLM_MODEL, temperature=JUDGE_TEMPERATURE)
+    llm = ChatAnthropic(model=LLM_MODEL, temperature=JUDGE_TEMPERATURE)
     chain = prompt | llm | StrOutputParser()
     raw = chain.invoke({"case_facts": case_facts, "decision_json": decision_json})
 
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-
+    from app.utils import clean_llm_json
     try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
+        data = clean_llm_json(raw)
+    except (json.JSONDecodeError, ValueError):
         data = {"approved": True, "issues_found": [], "explanation": "Judge failed to parse."}
 
     return JudgeVerdict(
