@@ -2,11 +2,10 @@
 
 import json
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-from app.config import LLM_MODEL, JUDGE_TEMPERATURE
+from app.config import LLM_MODEL, JUDGE_TEMPERATURE, USE_OPENAI_FOR_AGENTS, OPENAI_AGENT_MODEL
 from app.prompts.judge import JUDGE_PROMPT
 from app.models.schemas import ClassifierOutput, JudgeVerdict
 
@@ -36,7 +35,12 @@ def run_judge(classifier_output: ClassifierOutput, specialist_decision: dict) ->
         ("human", "Please review this decision and provide your verdict."),
     ])
 
-    llm = ChatAnthropic(model=LLM_MODEL, temperature=JUDGE_TEMPERATURE)
+    if USE_OPENAI_FOR_AGENTS:
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(model=OPENAI_AGENT_MODEL, temperature=JUDGE_TEMPERATURE)
+    else:
+        from langchain_anthropic import ChatAnthropic
+        llm = ChatAnthropic(model=LLM_MODEL, temperature=JUDGE_TEMPERATURE)
     chain = prompt | llm | StrOutputParser()
     raw = chain.invoke({"case_facts": case_facts, "decision_json": decision_json})
 

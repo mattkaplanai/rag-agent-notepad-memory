@@ -2,11 +2,15 @@
 
 import json
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-from app.config import CLASSIFIER_MODEL, CLASSIFIER_TEMPERATURE
+from app.config import (
+    CLASSIFIER_MODEL,
+    CLASSIFIER_TEMPERATURE,
+    USE_OPENAI_FOR_AGENTS,
+    OPENAI_AGENT_MODEL,
+)
 from app.prompts.classifier import CLASSIFIER_PROMPT
 from app.models.schemas import ClassifierOutput
 
@@ -36,7 +40,12 @@ def run_classifier(
         ("human", "{input}"),
     ])
 
-    llm = ChatAnthropic(model=CLASSIFIER_MODEL, temperature=CLASSIFIER_TEMPERATURE)
+    if USE_OPENAI_FOR_AGENTS:
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(model=OPENAI_AGENT_MODEL, temperature=CLASSIFIER_TEMPERATURE)
+    else:
+        from langchain_anthropic import ChatAnthropic
+        llm = ChatAnthropic(model=CLASSIFIER_MODEL, temperature=CLASSIFIER_TEMPERATURE)
     chain = prompt | llm | StrOutputParser()
     raw = chain.invoke({"input": user_input})
 

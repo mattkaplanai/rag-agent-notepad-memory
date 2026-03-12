@@ -1,39 +1,38 @@
-# RAG Projesi - Bağımlılıklar (Python 3.10+ önerilir)
+# RAG Projesi - Bağımlılıklar (Python 3.10+)
+# Sürümler sabitlendi; pip "resolution-too-deep" hatasını önlemek için.
 
-# Ortam değişkenleri
 python-dotenv>=1.0.0
 
-# LlamaIndex - indeksleme ve vektör arama (Python 3.10+ gerekir; 3.9'da 0.10.x kullanın)
-llama-index-core>=0.10.0,<0.11.0
-llama-index-readers-file>=0.1.0
-llama-index-embeddings-openai>=0.1.0
-llama-index-llms-openai>=0.1.0
-# LangChain - zincir ve OpenAI köprüsü
-langchain>=0.1.0
-langchain-openai>=0.0.5
-langchain-anthropic>=0.3.0
-langchain-core>=0.1.0
+# LlamaIndex 0.10.x — hepsi core 0.10 ile uyumlu (Chroma 0.2.x core 0.11 ister, 0.1.1 kullanıyoruz)
+llama-index-core==0.10.68.post1
+llama-index-readers-file==0.1.32
+llama-index-embeddings-openai==0.1.10
+llama-index-llms-openai==0.1.31
+llama-index-vector-stores-chroma==0.1.1
+chromadb>=0.4.22,<0.5.0
+
+# BM25 for hybrid search (Researcher tool)
+rank_bm25>=0.2.2
+
+# LangChain
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langchain-anthropic>=0.2.0
+langchain-core>=0.3.0
 langgraph>=0.2.0
 
-# OpenAI
+# API & UI
 openai>=1.0.0
-
-# Gradio - web arayüzü (HfFolder uyumluluğu için huggingface_hub sınırı)
 huggingface_hub>=0.19.0,<0.26.0
 gradio>=4.0.0
 
-# Belgeler için (PDF, Word otomatik desteklenir)
+# Belgeler (PDF, Word)
 pypdf>=3.0.0
 python-docx>=1.0.0
-docx2txt>=0.8  # LlamaIndex .docx okuması için gerekli
+docx2txt>=0.8
 
-# PostgreSQL (decision cache layer)
+# DB & export
 psycopg2-binary>=2.9.0
-
-# Excel export for decision cache log
 openpyxl>=3.1.0
-
-# Scripts: fetch PDFs from USDOT pages
 requests>=2.28.0
-# Anthropic
 anthropic>=0.40.0

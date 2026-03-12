@@ -9,7 +9,7 @@ Usage:
 
 import logging
 
-from app.config import SERVER_HOST, SERVER_PORT
+from app.config import SERVER_HOST, SERVER_PORT, ensure_anthropic_or_fallback
 from app.rag.indexer import build_or_load_index
 from app.agents.researcher import build_researcher
 from app.agents.analyst import build_analyst
@@ -28,6 +28,8 @@ def main():
     logger.info("Airlines Refund Decision Maker")
     logger.info("Building document index...")
     index = build_or_load_index()
+
+    ensure_anthropic_or_fallback(logger)
 
     logger.info("Building worker agents...")
     researcher_agent = build_researcher(index)
