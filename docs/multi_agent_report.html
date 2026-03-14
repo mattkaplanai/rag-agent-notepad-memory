@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi-Agent System — Airlines Refund Decision Maker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep: #0a0a0c;
+      --bg-card: #121216;
+      --bg-elevated: #1a1a1f;
+      --text-primary: #e8e4df;
+      --text-muted: #9a9590;
+      --accent: #e5a00d;
+      --accent-dim: rgba(229, 160, 13, 0.25);
+      --success: #22c55e;
+      --deny: #ef4444;
+      --partial: #f59e0b;
+      --border: rgba(255, 255, 255, 0.06);
+      --radius: 12px;
+      --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+      --font-body: 'Source Serif 4', Georgia, serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      font-size: 1.05rem;
+      line-height: 1.65;
+      color: var(--text-primary);
+      background: var(--bg-deep);
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      top: -50%;
+      right: -30%;
+      width: 80%;
+      height: 80%;
+      background: radial-gradient(ellipse, var(--accent-dim) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 2;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: clamp(2rem, 5vw, 4rem) clamp(1.5rem, 4vw, 2.5rem);
+    }
+
+    /* Staggered reveal */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      animation: reveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    .reveal:nth-child(1) { animation-delay: 0.05s; }
+    .reveal:nth-child(2) { animation-delay: 0.12s; }
+    .reveal:nth-child(3) { animation-delay: 0.19s; }
+    .reveal:nth-child(4) { animation-delay: 0.26s; }
+    .reveal:nth-child(5) { animation-delay: 0.33s; }
+    .reveal:nth-child(6) { animation-delay: 0.4s; }
+    .reveal:nth-child(7) { animation-delay: 0.47s; }
+    .reveal:nth-child(8) { animation-delay: 0.54s; }
+    .reveal:nth-child(9) { animation-delay: 0.61s; }
+    .reveal:nth-child(10) { animation-delay: 0.68s; }
+    @keyframes reveal {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: clamp(2rem, 5vw, 2.75rem);
+      letter-spacing: -0.02em;
+      margin: 0 0 0.5rem;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin: 0 0 3rem;
+    }
+
+    h2 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.5rem;
+      margin: 2.5rem 0 1rem;
+      color: var(--text-primary);
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.15rem;
+      margin: 1.5rem 0 0.5rem;
+      color: var(--accent);
+    }
+
+    p {
+      margin: 0 0 1rem;
+      color: var(--text-muted);
+    }
+
+    .lead {
+      font-size: 1.15rem;
+      color: var(--text-primary);
+      margin-bottom: 2rem;
+    }
+
+    /* High-level diagram */
+    .diagram-block {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      margin: 1.5rem 0;
+      overflow-x: auto;
+    }
+
+    .flow-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.5rem 0;
+    }
+
+    .flow-node {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    .flow-node.highlight {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-dim);
+    }
+
+    .flow-node.user { border-color: var(--success); color: var(--success); }
+    .flow-node.cache { border-color: #3b82f6; color: #93c5fd; }
+    .flow-node.db { border-color: #8b5cf6; color: #c4b5fd; }
+    .flow-node.rag { border-color: #06b6d4; color: #67e8f9; }
+
+    .flow-arrow {
+      color: var(--text-muted);
+      font-size: 1rem;
+      margin: 0 0.15rem;
+    }
+
+    /* Pipeline stages */
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .stage {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      text-align: center;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .stage:hover {
+      border-color: var(--accent-dim);
+      transform: translateY(-2px);
+    }
+
+    .stage-emoji {
+      font-size: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .stage-name {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+    }
+
+    .stage-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.35rem;
+    }
+
+    /* Request flow (steps) */
+    .steps {
+      counter-reset: step;
+    }
+
+    .step {
+      position: relative;
+      padding-left: 3rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+    }
+
+    .step h4 {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      margin: 0 0 0.35rem;
+      color: var(--text-primary);
+    }
+
+    .step p {
+      margin: 0;
+      font-size: 0.95rem;
+    }
+
+    /* Data table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin: 1rem 0;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.65rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.75rem;
+    }
+
+    td {
+      color: var(--text-primary);
+    }
+
+    td code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      background: var(--bg-elevated);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+    }
+
+    /* Tools list */
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .tool-tag {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      padding: 0.4rem 0.65rem;
+      background: var(--bg-elevated);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .tool-tag.agent { border-left: 3px solid var(--accent); }
+
+    /* One-sentence story */
+    .story-box {
+      background: linear-gradient(145deg, var(--bg-card) 0%, var(--bg-elevated) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin: 2rem 0;
+      border-left: 4px solid var(--accent);
+    }
+
+    .story-box p {
+      margin: 0;
+      font-size: 1.05rem;
+      color: var(--text-primary);
+      line-height: 1.7;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="reveal">
+      <h1>Multi-Agent System</h1>
+      <p class="subtitle">Airlines Refund Decision Maker · Gradio on :7862 · Classifier → Researcher → Analyst → Writer → Judge</p>
+    </header>
+
+    <section class="reveal">
+      <h2>1. High-level picture</h2>
+      <p class="lead">The user submits a case from the browser. The Gradio app receives it, then either serves a cached/DB answer or runs the full pipeline (Classifier → Researcher → Analyst → Writer → Judge) and saves the result.</p>
+
+      <div class="diagram-block">
+        <div class="flow-row">
+          <span class="flow-node user">USER (Browser)</span>
+        </div>
+        <div class="flow-row"><span class="flow-arrow">↓</span></div>
+        <div class="flow-row">
+          <span class="flow-node highlight">Gradio App (multi_agent.py)</span>
+        </div>
+        <div class="flow-row"><span class="flow-arrow">↓</span></div>
+        <div class="flow-row">
+          <span class="flow-node cache">JSON Cache + Excel</span>
+          <span class="flow-arrow">+</span>
+          <span class="flow-node db">PostgreSQL</span>
+          <span class="flow-arrow">+</span>
+          <span class="flow-node rag">RAG Index (LlamaIndex)</span>
+        </div>
+        <div class="flow-row"><span class="flow-arrow">↓</span></div>
+        <div class="flow-row">
+          <span class="flow-node">Pipeline: Classifier → Researcher → Analyst → Writer → Judge</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <h2>2. Request flow (step by step)</h2>
+
+      <p class="lead">Each request goes through cache → DB → pipeline. First hit wins; only on full miss do we run all five agents.</p>
+
+      <div class="diagram-block" style="margin-bottom: 2rem;">
+        <div class="flow-row">
+          <span class="flow-node">User Question</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-node cache">Cache (exact / semantic)</span>
+        </div>
+        <div class="flow-row">
+          <span class="flow-arrow">↳ miss →</span>
+          <span class="flow-node db">DB (exact / semantic)</span>
+        </div>
+        <div class="flow-row">
+          <span class="flow-arrow">↳ miss →</span>
+          <span class="flow-node highlight">Classifier → Researcher → Analyst → Writer → Judge</span>
+        </div>
+        <div class="flow-row">
+          <span class="flow-arrow">→</span>
+          <span class="flow-node">Save (cache + Excel + DB)</span>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <h4>User question</h4>
+          <p>Form submitted (case type, flight type, ticket type, payment, accepted alternative, description). Logged as <code>USER QUESTION</code> block.</p>
+        </div>
+        <div class="step">
+          <h4>Cache lookup</h4>
+          <p>Exact match by input hash; on miss, semantic match (embedding + cosine similarity ≥ 0.9). If hit → return cached decision and stop.</p>
+        </div>
+        <div class="step">
+          <h4>DB lookup</h4>
+          <p>PostgreSQL: exact by hash, then semantic by embedding (≥ 0.9). If hit → return DB decision and stop.</p>
+        </div>
+        <div class="step">
+          <h4>Full pipeline (on cache + DB miss)</h4>
+          <p><strong>3a. Classifier (LLM)</strong> — Extracts case category, delay/bag hours, payment, key facts, etc. → case summary.<br>
+             <strong>3b. Researcher (LLM + tool)</strong> — Uses <code>search_regulations</code> on the RAG index (PDFs in <code>bilgiler/</code>). Returns applicable rules.<br>
+             <strong>3c. Analyst (LLM + tools)</strong> — Uses <code>check_delay_threshold</code>, <code>check_baggage_threshold</code>, <code>calculate_refund</code>, <code>calculate_refund_timeline</code>. Decides APPROVED / DENIED / PARTIAL.<br>
+             <strong>3d. Writer (LLM + tool)</strong> — Produces structured JSON decision and, if approved/partial, <code>generate_decision_letter</code>.<br>
+             <strong>3e. Judge (LLM)</strong> — Reviews the outcome; can override if something looks wrong.</p>
+        </div>
+        <div class="step">
+          <h4>Save</h4>
+          <p>Append to JSON cache, export to Excel (<code>decision_log.xlsx</code>), insert one row into PostgreSQL (with embedding for future semantic hit). Log SUMMARY and FLOW DIAGRAM, then END OF FLOW.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <h2>3. Pipeline stages (agents)</h2>
+
+      <div class="pipeline">
+        <div class="stage">
+          <div class="stage-emoji">🔵</div>
+          <div class="stage-name">Classifier</div>
+          <div class="stage-desc">LLM extracts structured case fields from free text</div>
+        </div>
+        <div class="stage">
+          <div class="stage-emoji">📚</div>
+          <div class="stage-name">Researcher</div>
+          <div class="stage-desc">LLM + search_regulations on RAG index</div>
+        </div>
+        <div class="stage">
+          <div class="stage-emoji">🔢</div>
+          <div class="stage-name">Analyst</div>
+          <div class="stage-desc">LLM + delay/bag/refund/timeline tools</div>
+        </div>
+        <div class="stage">
+          <div class="stage-emoji">✍️</div>
+          <div class="stage-name">Writer</div>
+          <div class="stage-desc">LLM + generate_decision_letter</div>
+        </div>
+        <div class="stage">
+          <div class="stage-emoji">🔴</div>
+          <div class="stage-name">Judge</div>
+          <div class="stage-desc">LLM reviews and can override</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <h2>4. Tools used by agents</h2>
+      <p>Deterministic tools (in <code>refund_tools.py</code>) do the math and rule lookups; the LLMs decide when to call them.</p>
+      <div class="tools-grid">
+        <span class="tool-tag agent">search_regulations</span>
+        <span class="tool-tag">check_delay_threshold</span>
+        <span class="tool-tag">check_baggage_threshold</span>
+        <span class="tool-tag">calculate_refund</span>
+        <span class="tool-tag">calculate_refund_timeline</span>
+        <span class="tool-tag agent">generate_decision_letter</span>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <h2>5. Where things live</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>What</th>
+            <th>Where</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>User input</td>
+            <td>Gradio UI (browser)</td>
+            <td>Form: case type, flight type, ticket type, payment, accepted alternative, description</td>
+          </tr>
+          <tr>
+            <td>API</td>
+            <td>Gradio server (<code>multi_agent.py</code>)</td>
+            <td>Button click → <code>analyze_streaming()</code> with form values</td>
+          </tr>
+          <tr>
+            <td>Cache</td>
+            <td><code>decision_cache.json</code></td>
+            <td>Exact hash + semantic similarity; avoids re-running LLMs</td>
+          </tr>
+          <tr>
+            <td>Cache export</td>
+            <td><code>decision_log.xlsx</code></td>
+            <td>Human-readable log of decisions</td>
+          </tr>
+          <tr>
+            <td>Persistent store</td>
+            <td>PostgreSQL <code>refund_decisions</code></td>
+            <td>Exact + semantic lookup; durable</td>
+          </tr>
+          <tr>
+            <td>Regulation docs</td>
+            <td><code>bilgiler/*.pdf</code> (.docx, .txt, .md)</td>
+            <td>Source documents for RAG</td>
+          </tr>
+          <tr>
+            <td>RAG index</td>
+            <td>LlamaIndex <code>storage/</code></td>
+            <td>Vector index; used by Researcher’s <code>search_regulations</code></td>
+          </tr>
+          <tr>
+            <td>Logs</td>
+            <td>Terminal + <code>logs/multi_agent.log</code></td>
+            <td>Step-by-step flow, USER QUESTION, SUMMARY, FLOW DIAGRAM, END OF FLOW</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="reveal">
+      <h2>6. Decision outcomes</h2>
+      <p>The pipeline produces one of three decisions, surfaced in the UI and logs:</p>
+      <div class="pipeline" style="grid-template-columns: repeat(3, 1fr); max-width: 480px;">
+        <div class="stage" style="border-color: rgba(34, 197, 94, 0.35);">
+          <div class="stage-emoji">✅</div>
+          <div class="stage-name" style="color: var(--success);">APPROVED</div>
+          <div class="stage-desc">Refund granted; letter generated</div>
+        </div>
+        <div class="stage" style="border-color: rgba(239, 68, 68, 0.35);">
+          <div class="stage-emoji">❌</div>
+          <div class="stage-name" style="color: var(--deny);">DENIED</div>
+          <div class="stage-desc">Does not meet DOT thresholds</div>
+        </div>
+        <div class="stage" style="border-color: rgba(245, 158, 11, 0.35);">
+          <div class="stage-emoji">⚠️</div>
+          <div class="stage-name" style="color: var(--partial);">PARTIAL</div>
+          <div class="stage-desc">Partial refund or special case</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <h2>7. One-sentence story</h2>
+      <div class="story-box">
+        <p>Gradio receives your question, tries cache and PostgreSQL for a quick answer, and on miss runs a local multi-agent pipeline (Classifier → Researcher → Analyst → Writer → Judge) over your regulations and tools, then saves the result back into the cache and DB and logs everything in detail for that single question.</p>
+      </div>
+    </section>
+
+    <footer class="reveal">
+      <p>Generated from <code>docs/ARCHITECTURE.md</code> and <code>multi_agent.py</code>. Run the app with <code>python multi_agent.py</code> (Gradio on port 7862). No Django in this path — Gradio handles HTTP and calls the pipeline directly.</p>
+    </footer>
+  </div>
+</body>
+</html>

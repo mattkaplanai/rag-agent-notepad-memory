@@ -1,0 +1,13 @@
+{
+  "name": "mcp-currency",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server for currency conversion (Frankfurter API, no key)",
+  "bin": { "mcp-currency": "index.mjs" },
+  "scripts": { "start": "node index.mjs" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "zod": "^3.23.0"
+  }
+}
