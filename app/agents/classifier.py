@@ -6,6 +6,7 @@ import time
 
 logger = logging.getLogger(__name__)
 from app.agents.ansi_colors import C as _C, G as _G, X as _X
+from app.agents.retry import invoke_with_retry
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -54,7 +55,10 @@ def run_classifier(
     chain = prompt | llm | StrOutputParser()
     logger.info(f"{_C}[CLASSIFY] ▶ Extracting structured facts from case description...{_X}")
     t0 = time.time()
-    raw = chain.invoke({"input": user_input})
+    raw = invoke_with_retry(
+        lambda: chain.invoke({"input": user_input}),
+        label="Classifier",
+    )
     elapsed = time.time() - t0
 
     from app.utils import clean_llm_json
