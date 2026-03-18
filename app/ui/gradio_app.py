@@ -1,13 +1,19 @@
 """Gradio UI -- the web interface for the multi-agent refund decision system."""
 
+import logging
 import gradio as gr
+
+logger = logging.getLogger(__name__)
+from app.agents.ansi_colors import G as _G, R as _R, Y as _Y, W as _W, B as _B, X as _X
 
 from app.config import CASE_TYPES, FLIGHT_TYPES, TICKET_TYPES, PAYMENT_METHODS, ACCEPTED_ALTERNATIVES
 from app.models.schemas import MultiAgentResult
 from app.agents.classifier import run_classifier, build_case_summary
 from app.agents.judge import run_judge
 from app.agents.supervisor import run_multi_agent
+from app.guards import run_input_guard, run_output_guard
 from app.cache.decision_cache import DecisionCache
+from app.db.decision_db import DecisionDB
 
 
 def format_decision(result: MultiAgentResult) -> str:
@@ -73,11 +79,35 @@ def create_app(index, researcher_agent, analyst_agent, writer_agent):
     """Create and return the Gradio app."""
 
     cache = DecisionCache()
+    db = DecisionDB()
 
     def analyze(case_type, flight_type, ticket_type, payment_method,
                 accepted_alternative, description, progress=gr.Progress()):
         if not description or not description.strip():
             return "Please describe what happened.", "", ""
+
+        logger.info(f"{_W}[PIPELINE] ══════════ NEW CASE ══════════════════════════{_X}")
+        logger.info(f"{_B}[PIPELINE] Type: {case_type} | Flight: {flight_type} | Payment: {payment_method}{_X}")
+
+        # Input guard: block before cache/pipeline if request is unsafe or off-topic
+        data = {
+            "case_type": case_type, "flight_type": flight_type, "ticket_type": ticket_type,
+            "payment_method": payment_method, "accepted_alternative": accepted_alternative,
+            "description": (description or "").strip(),
+        }
+        input_result = run_input_guard(data)
+        if not input_result.passed:
+            logger.info(f"{_R}[GUARD   ] ✗ Blocked — {input_result.block_reason}{_X}")
+            err_result = MultiAgentResult(supervisor_decision=input_result.block_response or {})
+            return (
+                format_decision(err_result),
+                f"Cache: {cache.stats['total_entries']} entries",
+                f"**Input guard blocked:** {input_result.block_reason}\n\nChecks: {', '.join(input_result.checks_performed)}",
+            )
+        logger.info(f"{_G}[GUARD   ] ✓ Input guard passed{_X}")
+        data = input_result.sanitized_data or data
+        case_type, flight_type, ticket_type = data["case_type"], data["flight_type"], data["ticket_type"]
+        payment_method, accepted_alternative, description = data["payment_method"], data["accepted_alternative"], data["description"]
 
         progress(0.1, desc="Checking cache...")
         cached_result, cache_status, query_embedding = cache.lookup(
@@ -86,11 +116,37 @@ def create_app(index, researcher_agent, analyst_agent, writer_agent):
         )
         if cached_result:
             label = {"exact_hit": "EXACT HIT", "semantic_hit": "SIMILAR"}.get(cache_status, "")
+            logger.info(f"{_G}[CACHE   ] ✓ {label} — returning cached decision{_X}")
             return (
                 format_decision(MultiAgentResult(supervisor_decision=cached_result)),
                 f"Cache: {label} | {cache.stats['total_entries']} entries",
                 "*Served from cache.*",
             )
+        logger.info(f"{_Y}[CACHE   ] ✗ Miss — proceeding to pipeline{_X}")
+
+        # DB lookup: check PostgreSQL for past decisions (tier 2)
+        if db.enabled:
+            progress(0.15, desc="Checking decision database...")
+            db_result = db.get_by_hash(
+                case_type, flight_type, ticket_type,
+                payment_method, accepted_alternative, description,
+            )
+            if not db_result and query_embedding:
+                db_result = db.get_by_semantic(query_embedding)
+            if db_result:
+                logger.info(f"{_G}[DB      ] ✓ Hit — returning stored decision{_X}")
+                # Store in cache for faster future hits
+                cache.store(
+                    case_type, flight_type, ticket_type,
+                    payment_method, accepted_alternative, description, db_result,
+                    embedding=query_embedding,
+                )
+                return (
+                    format_decision(MultiAgentResult(supervisor_decision=db_result)),
+                    f"DB HIT | Cache: {cache.stats['total_entries']} entries",
+                    "*Served from database (PostgreSQL).*",
+                )
+            logger.info(f"{_Y}[DB      ] ✗ Miss — running full pipeline{_X}")
 
         progress(0.2, desc="Classifying case...")
         classifier_output = run_classifier(
@@ -119,15 +175,31 @@ def create_app(index, researcher_agent, analyst_agent, writer_agent):
         else:
             ma_result.agent_log.append(f"\n**Judge** -- Approved")
 
-        progress(0.9, desc="Caching result...")
+        # Output guard: enforce decision shape and citations
         final = ma_result.supervisor_decision
+        output_result = run_output_guard(final)
+        if not output_result.passed:
+            ma_result.agent_log.append(f"\n**Output guard** -- Blocked: {output_result.block_reason}")
+            ma_result.supervisor_decision = output_result.override_decision or final
+            final = ma_result.supervisor_decision
+
+        progress(0.9, desc="Caching result...")
+        decision_val = final.get("decision", "?")
+        color = {"APPROVED": _G, "DENIED": _R, "PARTIAL": _Y}.get(decision_val, _W)
+        logger.info(f"{color}[DECISION] ══ {decision_val} | Confidence: {final.get('confidence','?')} ══{_X}")
         if final.get("decision") != "ERROR":
             cache.store(
                 case_type, flight_type, ticket_type,
                 payment_method, accepted_alternative, description, final,
                 embedding=query_embedding,
             )
+            db.insert(
+                case_type, flight_type, ticket_type,
+                payment_method, accepted_alternative, description, final,
+                embedding=query_embedding,
+            )
 
+            logger.info(f"{_G}[STORE   ] ✓ Saved to cache + PostgreSQL (cache: {cache.stats['total_entries']} entries){_X}")
         progress(1.0, desc="Done!")
         return (
             format_decision(ma_result),
@@ -176,8 +248,11 @@ def create_app(index, researcher_agent, analyst_agent, writer_agent):
 
         gr.Markdown("---")
         gr.Markdown(
-            "**Tools:** `search_regulations` | `check_delay_threshold` | `check_baggage_threshold` | "
-            "`calculate_refund` | `calculate_refund_timeline` | `generate_decision_letter`"
+            "**Researcher Tools:** `search_regulations` | `lookup_regulation` | "
+            "`cross_reference` | `search_past_decisions` | `summarize_findings`\n\n"
+            "**Analyst Tools:** `check_delay_threshold` | `check_baggage_threshold` | "
+            "`calculate_refund` | `calculate_refund_timeline`\n\n"
+            "**Writer Tools:** `generate_decision_letter`"
         )
 
     return app

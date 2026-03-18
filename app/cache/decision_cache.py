@@ -3,7 +3,6 @@ Two-level decision cache + Excel export.
 Level 1: exact hash match. Level 2: semantic embedding similarity.
 """
 
-import hashlib
 import json
 import logging
 import time
@@ -12,14 +11,9 @@ from pathlib import Path
 from typing import Optional
 
 from app.config import CACHE_FILE, EMBEDDING_MODEL, EMBEDDING_TIMEOUT, EXCEL_FILE, SEMANTIC_THRESHOLD
-from app.utils import cosine_similarity
+from app.utils import cosine_similarity, hash_inputs
 
 logger = logging.getLogger(__name__)
-
-
-def _hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description):
-    raw = "|".join([s.strip().lower() for s in [case_type, flight_type, ticket_type, payment_method, accepted_alternative, description]])
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _get_embedding(text):
@@ -117,7 +111,7 @@ class DecisionCache:
         The query_embedding is returned so callers can pass it to store()
         without re-computing it (avoids a redundant OpenAI API call).
         """
-        input_hash = _hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description)
+        input_hash = hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description)
 
         for entry in self.entries:
             if entry.get("hash") == input_hash:
@@ -147,7 +141,7 @@ class DecisionCache:
 
     def store(self, case_type, flight_type, ticket_type, payment_method, accepted_alternative, description, result, embedding=None):
         """Store a decision. Pass embedding from lookup() to avoid redundant API call."""
-        input_hash = _hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description)
+        input_hash = hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description)
         if embedding is None and description.strip():
             embedding = _get_embedding(description)
 

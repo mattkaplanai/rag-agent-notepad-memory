@@ -15,6 +15,11 @@ from .serializers import (
     RefundDecisionSerializer,
     RefundDecisionListSerializer,
 )
+from app.cache.decision_cache import DecisionCache
+from app.db.decision_db import DecisionDB
+
+_cache = DecisionCache()
+_db = DecisionDB()
 
 
 def _get_pipeline():
@@ -63,6 +68,44 @@ def analyze_case(request):
     data = serializer.validated_data
     start_time = time.time()
 
+    # Input guard: block before pipeline if request is unsafe or off-topic
+    from app.guards import run_input_guard
+    input_result = run_input_guard(data)
+    if not input_result.passed:
+        logger.warning("Input guard blocked request: %s", input_result.block_reason)
+        return Response(
+            input_result.block_response,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    data = input_result.sanitized_data or data
+
+    # ── Tier 1: JSON cache lookup ────────────────────────────────────────────
+    cached_result, cache_status, query_embedding = _cache.lookup(
+        data['case_type'], data['flight_type'], data['ticket_type'],
+        data['payment_method'], data['accepted_alternative'], data['description'],
+    )
+    if cached_result:
+        logger.info("API cache %s.", cache_status)
+        return Response({"source": f"cache_{cache_status}", "result": cached_result})
+
+    # ── Tier 2: PostgreSQL DB lookup ─────────────────────────────────────────
+    if _db.enabled:
+        db_result = _db.get_by_hash(
+            data['case_type'], data['flight_type'], data['ticket_type'],
+            data['payment_method'], data['accepted_alternative'], data['description'],
+        )
+        if not db_result and query_embedding:
+            db_result = _db.get_by_semantic(query_embedding)
+        if db_result:
+            logger.info("API DB hit.")
+            _cache.store(
+                data['case_type'], data['flight_type'], data['ticket_type'],
+                data['payment_method'], data['accepted_alternative'], data['description'],
+                db_result, embedding=query_embedding,
+            )
+            return Response({"source": "database", "result": db_result})
+
+    # ── Tier 3: Full multi-agent pipeline ────────────────────────────────────
     from app.agents.classifier import run_classifier, build_case_summary
     from app.agents.judge import run_judge
     from app.agents.supervisor import run_multi_agent
@@ -90,7 +133,27 @@ def analyze_case(request):
         final['judge_override'] = True
         final['judge_explanation'] = judge_verdict.explanation
 
+    # Output guard: enforce decision shape and citations; replace with ERROR if invalid
+    from app.guards import run_output_guard
+    output_result = run_output_guard(final)
+    if not output_result.passed:
+        logger.warning("Output guard blocked decision: %s", output_result.block_reason)
+        final = output_result.override_decision or final
+
     processing_time = round(time.time() - start_time, 2)
+
+    # Store in cache + DB for future lookups
+    if final.get('decision') != 'ERROR':
+        _cache.store(
+            data['case_type'], data['flight_type'], data['ticket_type'],
+            data['payment_method'], data['accepted_alternative'], data['description'],
+            final, embedding=query_embedding,
+        )
+        _db.insert(
+            data['case_type'], data['flight_type'], data['ticket_type'],
+            data['payment_method'], data['accepted_alternative'], data['description'],
+            final, embedding=query_embedding,
+        )
 
     record = RefundDecision.objects.create(
         case_type=data['case_type'],

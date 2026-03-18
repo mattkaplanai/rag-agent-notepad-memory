@@ -1,6 +1,11 @@
 """Judge LLM — reviews the specialist's decision for errors."""
 
 import json
+import logging
+import time
+
+logger = logging.getLogger(__name__)
+from app.agents.ansi_colors import C as _C, G as _G, Y as _Y, X as _X
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -42,7 +47,10 @@ def run_judge(classifier_output: ClassifierOutput, specialist_decision: dict) ->
         from langchain_anthropic import ChatAnthropic
         llm = ChatAnthropic(model=LLM_MODEL, temperature=JUDGE_TEMPERATURE)
     chain = prompt | llm | StrOutputParser()
+    logger.info(f"{_C}[JUDGE   ] ▶ Reviewing specialist decision...{_X}")
+    t0 = time.time()
     raw = chain.invoke({"case_facts": case_facts, "decision_json": decision_json})
+    elapsed = time.time() - t0
 
     from app.utils import clean_llm_json
     try:
@@ -50,8 +58,16 @@ def run_judge(classifier_output: ClassifierOutput, specialist_decision: dict) ->
     except (json.JSONDecodeError, ValueError):
         data = {"approved": True, "issues_found": [], "explanation": "Judge failed to parse."}
 
+    approved = data.get("approved", True)
+    explanation = data.get("explanation", "")[:80]
+    if approved:
+        logger.info(f"{_G}[JUDGE   ] ✓ APPROVED decision in {elapsed:.1f}s — {explanation}{_X}")
+    else:
+        override = data.get("override_decision", "?")
+        logger.info(f"{_Y}[JUDGE   ] ✗ OVERRIDING → {override} in {elapsed:.1f}s — {explanation}{_X}")
+
     return JudgeVerdict(
-        approved=data.get("approved", True),
+        approved=approved,
         issues_found=data.get("issues_found", []),
         override_decision=data.get("override_decision", ""),
         override_reasons=data.get("override_reasons", []),
