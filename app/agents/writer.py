@@ -3,6 +3,7 @@
 from langgraph.prebuilt import create_react_agent
 
 from app.agents.tool_logger import make_tool_logger
+from app.agents.retry import invoke_with_retry
 from app.config import (
     LLM_MODEL,
     SPECIALIST_TEMPERATURE,
@@ -26,9 +27,12 @@ def build_writer():
 
 def run_writer(agent, task: str) -> str:
     """Run the Writer agent and return its output."""
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": task}]},
-        config={"callbacks": [make_tool_logger("WRITER  ")]},
+    result = invoke_with_retry(
+        lambda: agent.invoke(
+            {"messages": [{"role": "user", "content": task}]},
+            config={"callbacks": [make_tool_logger("WRITER  ")]},
+        ),
+        label="Writer",
     )
     messages = result.get("messages", [])
     return messages[-1].content if messages else ""

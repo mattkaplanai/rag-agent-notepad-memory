@@ -6,6 +6,7 @@ import time
 
 logger = logging.getLogger(__name__)
 from app.agents.ansi_colors import C as _C, G as _G, Y as _Y, X as _X
+from app.agents.retry import invoke_with_retry
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -49,7 +50,10 @@ def run_judge(classifier_output: ClassifierOutput, specialist_decision: dict) ->
     chain = prompt | llm | StrOutputParser()
     logger.info(f"{_C}[JUDGE   ] ▶ Reviewing specialist decision...{_X}")
     t0 = time.time()
-    raw = chain.invoke({"case_facts": case_facts, "decision_json": decision_json})
+    raw = invoke_with_retry(
+        lambda: chain.invoke({"case_facts": case_facts, "decision_json": decision_json}),
+        label="Judge",
+    )
     elapsed = time.time() - t0
 
     from app.utils import clean_llm_json
