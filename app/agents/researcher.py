@@ -1,6 +1,12 @@
 """Researcher agent — finds applicable DOT regulations using multiple tools."""
 
+import logging
+
 from langgraph.prebuilt import create_react_agent
+
+from app.agents.tool_logger import make_tool_logger
+
+logger = logging.getLogger(__name__)
 
 from app.config import (
     RESEARCHER_MODEL,
@@ -35,6 +41,9 @@ def build_researcher(index):
 
 def run_researcher(agent, task: str) -> str:
     """Run the Researcher agent and return its output."""
-    result = agent.invoke({"messages": [{"role": "user", "content": task}]})
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": task}]},
+        config={"callbacks": [make_tool_logger("RESEARCH")]},
+    )
     messages = result.get("messages", [])
     return messages[-1].content if messages else ""

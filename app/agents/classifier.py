@@ -1,6 +1,11 @@
 """Classifier agent — extracts structured facts from user input."""
 
 import json
+import logging
+import time
+
+logger = logging.getLogger(__name__)
+from app.agents.ansi_colors import C as _C, G as _G, X as _X
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -47,7 +52,10 @@ def run_classifier(
         from langchain_anthropic import ChatAnthropic
         llm = ChatAnthropic(model=CLASSIFIER_MODEL, temperature=CLASSIFIER_TEMPERATURE)
     chain = prompt | llm | StrOutputParser()
+    logger.info(f"{_C}[CLASSIFY] ▶ Extracting structured facts from case description...{_X}")
+    t0 = time.time()
     raw = chain.invoke({"input": user_input})
+    elapsed = time.time() - t0
 
     from app.utils import clean_llm_json
     try:
@@ -55,7 +63,7 @@ def run_classifier(
     except (json.JSONDecodeError, ValueError):
         data = {}
 
-    return ClassifierOutput(
+    co = ClassifierOutput(
         case_category=data.get("case_category", ""),
         flight_type=data.get("flight_type", ""),
         flight_duration_hours=data.get("flight_duration_hours"),
@@ -78,6 +86,12 @@ def run_classifier(
         key_facts=data.get("key_facts", []),
         raw_description=description,
     )
+    logger.info(
+        f"{_G}[CLASSIFY] ✓ Done in {elapsed:.1f}s — "
+        f"Category: {co.case_category} | Delay: {co.delay_hours}h | "
+        f"Price: ${co.ticket_price} | Airline: {co.airline_name}{_X}"
+    )
+    return co
 
 
 def build_case_summary(co: ClassifierOutput) -> str:

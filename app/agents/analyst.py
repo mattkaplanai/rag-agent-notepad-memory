@@ -1,6 +1,12 @@
 """Analyst agent — checks thresholds and calculates refunds."""
 
+import logging
+
 from langgraph.prebuilt import create_react_agent
+
+from app.agents.tool_logger import make_tool_logger
+
+logger = logging.getLogger(__name__)
 
 from app.config import (
     LLM_MODEL,
@@ -29,6 +35,9 @@ def build_analyst():
 
 def run_analyst(agent, task: str) -> str:
     """Run the Analyst agent and return its output."""
-    result = agent.invoke({"messages": [{"role": "user", "content": task}]})
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": task}]},
+        config={"callbacks": [make_tool_logger("ANALYST ")]},
+    )
     messages = result.get("messages", [])
     return messages[-1].content if messages else ""

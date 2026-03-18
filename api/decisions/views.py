@@ -15,6 +15,11 @@ from .serializers import (
     RefundDecisionSerializer,
     RefundDecisionListSerializer,
 )
+from app.cache.decision_cache import DecisionCache
+from app.db.decision_db import DecisionDB
+
+_cache = DecisionCache()
+_db = DecisionDB()
 
 
 def _get_pipeline():
@@ -75,9 +80,7 @@ def analyze_case(request):
     data = input_result.sanitized_data or data
 
     # ── Tier 1: JSON cache lookup ────────────────────────────────────────────
-    from app.cache.decision_cache import DecisionCache
-    cache = DecisionCache()
-    cached_result, cache_status, query_embedding = cache.lookup(
+    cached_result, cache_status, query_embedding = _cache.lookup(
         data['case_type'], data['flight_type'], data['ticket_type'],
         data['payment_method'], data['accepted_alternative'], data['description'],
     )
@@ -86,18 +89,16 @@ def analyze_case(request):
         return Response({"source": f"cache_{cache_status}", "result": cached_result})
 
     # ── Tier 2: PostgreSQL DB lookup ─────────────────────────────────────────
-    from app.db.decision_db import DecisionDB
-    db = DecisionDB()
-    if db.enabled:
-        db_result = db.get_by_hash(
+    if _db.enabled:
+        db_result = _db.get_by_hash(
             data['case_type'], data['flight_type'], data['ticket_type'],
             data['payment_method'], data['accepted_alternative'], data['description'],
         )
         if not db_result and query_embedding:
-            db_result = db.get_by_semantic(query_embedding)
+            db_result = _db.get_by_semantic(query_embedding)
         if db_result:
             logger.info("API DB hit.")
-            cache.store(
+            _cache.store(
                 data['case_type'], data['flight_type'], data['ticket_type'],
                 data['payment_method'], data['accepted_alternative'], data['description'],
                 db_result, embedding=query_embedding,
@@ -143,12 +144,12 @@ def analyze_case(request):
 
     # Store in cache + DB for future lookups
     if final.get('decision') != 'ERROR':
-        cache.store(
+        _cache.store(
             data['case_type'], data['flight_type'], data['ticket_type'],
             data['payment_method'], data['accepted_alternative'], data['description'],
             final, embedding=query_embedding,
         )
-        db.insert(
+        _db.insert(
             data['case_type'], data['flight_type'], data['ticket_type'],
             data['payment_method'], data['accepted_alternative'], data['description'],
             final, embedding=query_embedding,
