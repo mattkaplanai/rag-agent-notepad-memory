@@ -69,6 +69,28 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "refund_db")
 
+# ── DOT Regulatory Thresholds ────────────────────────────────────────────────
+# Source: 14 CFR Part 259 / DOT Automatic Refund Rule (2024-07177)
+# Update these when DOT regulations change — tools read from here.
+
+DELAY_THRESHOLD_DOMESTIC_HOURS = 3.0       # domestic flight delay → significant
+DELAY_THRESHOLD_INTL_HOURS = 6.0           # international flight delay → significant
+BAGGAGE_THRESHOLD_DOMESTIC_HOURS = 12.0    # domestic bag delay → significantly delayed
+BAGGAGE_THRESHOLD_INTL_SHORT_HOURS = 15.0  # intl flight ≤12h: bag delay threshold
+BAGGAGE_THRESHOLD_INTL_LONG_HOURS = 30.0   # intl flight >12h: bag delay threshold
+BAGGAGE_INTL_FLIGHT_DURATION_CUTOFF = 12.0 # flight duration that splits short/long intl
+
+# ── LangFuse Observability ───────────────────────────────────────────────────
+
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+# Support both LANGFUSE_HOST (SDK standard) and LANGFUSE_BASE_URL (alias)
+LANGFUSE_HOST = (
+    os.getenv("LANGFUSE_HOST")
+    or os.getenv("LANGFUSE_BASE_URL")
+    or "https://cloud.langfuse.com"
+)
+
 # ── UI Settings ──────────────────────────────────────────────────────────────
 
 SERVER_HOST = "0.0.0.0"

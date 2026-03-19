@@ -6,6 +6,7 @@ from langgraph.prebuilt import create_react_agent
 
 from app.agents.tool_logger import make_tool_logger
 from app.agents.retry import invoke_with_retry
+from app.tracing import get_langfuse_callback
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,14 @@ def build_analyst():
 
 def run_analyst(agent, task: str) -> str:
     """Run the Analyst agent and return its output."""
+    callbacks = [make_tool_logger("ANALYST ")]
+    lf = get_langfuse_callback()
+    if lf:
+        callbacks.append(lf)
     result = invoke_with_retry(
         lambda: agent.invoke(
             {"messages": [{"role": "user", "content": task}]},
-            config={"callbacks": [make_tool_logger("ANALYST ")]},
+            config={"callbacks": callbacks},
         ),
         label="Analyst",
     )

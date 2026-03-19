@@ -44,3 +44,18 @@ The existing codebase has 5 unused-import warnings (F401) in `rag_app.py` and `r
 - `rag_app.py` **always rebuilds** the vector index on startup (deletes `storage/` each time). This means every restart calls the OpenAI Embeddings API and incurs cost/latency. `rag_agent.py` and `refund_decision.py` load from cache in `storage/` if available.
 - `python3.12-venv` must be installed system-wide (`sudo apt-get install python3.12-venv`) before creating the virtualenv. The update script handles dependency installation only; the venv and system package are set up once.
 - No automated test suite exists in this codebase; validation is manual via the Gradio UI.
+
+### Claude Code (CLI)
+
+Run `claude` from **this worktree root** (`sad-colden`) so `.claude/commands/` is picked up. Slash commands live there:
+
+| Command | Purpose |
+|---------|---------|
+| `/deploy` | Rebuild/restart Docker, verify `:7861` |
+| `/run-tests` | Pytest inside `refund-gradio` container |
+| `/check-db` | Summarize `refund_decisions` via MCP |
+| `/run-case` | Submit a test case to Gradio |
+
+If you see **Unknown skill: deploy**, the project root was missing `.claude/commands/` (now included in this worktree).
+
+If **`ENOENT: uv_cwd`** appears, your shell’s current directory no longer exists (e.g. deleted worktree path). `cd` to the real project path and run `claude` again.

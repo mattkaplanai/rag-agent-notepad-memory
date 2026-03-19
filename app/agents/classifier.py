@@ -1,15 +1,23 @@
-"""Classifier agent — extracts structured facts from user input."""
+"""Classifier agent — extracts structured facts from user input.
+
+Anthropic path: native client.messages.create() with tool_choice forces
+the model to populate every field in the schema. Enum constraints on
+case_category, flight_type, and alternative_type prevent invalid values.
+No JSON parsing — the SDK hands back a validated dict directly.
+
+OpenAI fallback: preserves the existing LangChain + JSON parse path.
+"""
 
 import json
 import logging
 import time
 
+import anthropic
+
 logger = logging.getLogger(__name__)
+from app.tracing import get_langfuse_anthropic_client
 from app.agents.ansi_colors import C as _C, G as _G, X as _X
 from app.agents.retry import invoke_with_retry
-
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
 
 from app.config import (
     CLASSIFIER_MODEL,
@@ -21,6 +29,130 @@ from app.prompts.classifier import CLASSIFIER_PROMPT
 from app.models.schemas import ClassifierOutput
 
 
+# Every field maps 1-to-1 with ClassifierOutput.
+# Enum constraints prevent invalid values for categorical fields.
+# ["type", "null"] allows optional numeric/string fields to be omitted.
+_EXTRACT_TOOL = {
+    "name": "extract_case_facts",
+    "description": (
+        "Extract all structured facts from the passenger's refund case. "
+        "You MUST call this tool — it is the only way to submit your extraction."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "case_category": {
+                "type": "string",
+                "enum": ["cancellation", "delay", "downgrade", "baggage", "ancillary", "24hour"],
+                "description": "Primary category of the refund case.",
+            },
+            "flight_type": {
+                "type": "string",
+                "enum": ["domestic", "international"],
+                "description": "domestic if both cities are in the US, international otherwise.",
+            },
+            "flight_duration_hours": {
+                "type": ["number", "null"],
+                "description": "Total flight duration in hours, if mentioned. Null if unknown.",
+            },
+            "delay_hours": {
+                "type": ["number", "null"],
+                "description": "Flight delay in hours. '5h 45m' = 5.75. Null if not a delay case.",
+            },
+            "bag_delay_hours": {
+                "type": ["number", "null"],
+                "description": "Hours between deplaning and bag delivery. Null if not a baggage case.",
+            },
+            "ticket_price": {
+                "type": ["number", "null"],
+                "description": "Ticket price in USD. Null if not mentioned.",
+            },
+            "ancillary_fee": {
+                "type": ["number", "null"],
+                "description": "Baggage or ancillary fee in USD. Null if not mentioned.",
+            },
+            "original_class": {
+                "type": ["string", "null"],
+                "description": "Original cabin class (e.g. Business). Null if not a downgrade case.",
+            },
+            "downgraded_class": {
+                "type": ["string", "null"],
+                "description": "Downgraded cabin class. Null if not a downgrade case.",
+            },
+            "original_class_price": {
+                "type": ["number", "null"],
+                "description": "Price paid for original class. Null if not mentioned.",
+            },
+            "downgraded_class_price": {
+                "type": ["number", "null"],
+                "description": "Price of downgraded class. Null if not mentioned.",
+            },
+            "payment_method": {
+                "type": "string",
+                "description": "Payment method used (e.g. Credit Card).",
+            },
+            "accepted_alternative": {
+                "type": "boolean",
+                "description": "True if passenger accepted rebooking, voucher, or compensation. False if they declined everything.",
+            },
+            "alternative_type": {
+                "type": "string",
+                "enum": ["rebooking", "voucher", "compensation", "none"],
+                "description": "Type of alternative accepted or offered. Use 'none' if nothing was accepted.",
+            },
+            "passenger_traveled": {
+                "type": "boolean",
+                "description": "True if the passenger actually took the flight.",
+            },
+            "booking_date": {
+                "type": ["string", "null"],
+                "description": "Booking date in YYYY-MM-DD format. Null if not mentioned.",
+            },
+            "flight_date": {
+                "type": ["string", "null"],
+                "description": "Flight date in YYYY-MM-DD format. Null if not mentioned.",
+            },
+            "airline_name": {
+                "type": ["string", "null"],
+                "description": "Name of the airline. Null if not mentioned.",
+            },
+            "flight_number": {
+                "type": ["string", "null"],
+                "description": "Flight number (e.g. UA202). Null if not mentioned.",
+            },
+            "key_facts": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Most important facts from the description that affect the refund decision.",
+            },
+        },
+        "required": [
+            "case_category",
+            "flight_type",
+            "flight_duration_hours",
+            "delay_hours",
+            "bag_delay_hours",
+            "ticket_price",
+            "ancillary_fee",
+            "original_class",
+            "downgraded_class",
+            "original_class_price",
+            "downgraded_class_price",
+            "payment_method",
+            "accepted_alternative",
+            "alternative_type",
+            "passenger_traveled",
+            "booking_date",
+            "flight_date",
+            "airline_name",
+            "flight_number",
+            "key_facts",
+        ],
+        "additionalProperties": False,
+    },
+}
+
+
 def run_classifier(
     case_type: str,
     flight_type: str,
@@ -29,7 +161,7 @@ def run_classifier(
     accepted_alternative: str,
     description: str,
 ) -> ClassifierOutput:
-    """Run the Classifier LLM to extract structured facts."""
+    """Extract structured facts from user input."""
 
     user_input = (
         f"Form fields:\n"
@@ -41,31 +173,15 @@ def run_classifier(
         f"Passenger description:\n{description}"
     )
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", CLASSIFIER_PROMPT),
-        ("human", "{input}"),
-    ])
-
-    if USE_OPENAI_FOR_AGENTS:
-        from langchain_openai import ChatOpenAI
-        llm = ChatOpenAI(model=OPENAI_AGENT_MODEL, temperature=CLASSIFIER_TEMPERATURE)
-    else:
-        from langchain_anthropic import ChatAnthropic
-        llm = ChatAnthropic(model=CLASSIFIER_MODEL, temperature=CLASSIFIER_TEMPERATURE)
-    chain = prompt | llm | StrOutputParser()
     logger.info(f"{_C}[CLASSIFY] ▶ Extracting structured facts from case description...{_X}")
     t0 = time.time()
-    raw = invoke_with_retry(
-        lambda: chain.invoke({"input": user_input}),
-        label="Classifier",
-    )
-    elapsed = time.time() - t0
 
-    from app.utils import clean_llm_json
-    try:
-        data = clean_llm_json(raw)
-    except (json.JSONDecodeError, ValueError):
-        data = {}
+    if USE_OPENAI_FOR_AGENTS:
+        data = _run_openai_fallback(user_input)
+    else:
+        data = _run_anthropic(user_input)
+
+    elapsed = time.time() - t0
 
     co = ClassifierOutput(
         case_category=data.get("case_category", ""),
@@ -96,6 +212,85 @@ def run_classifier(
         f"Price: ${co.ticket_price} | Airline: {co.airline_name}{_X}"
     )
     return co
+
+
+def _run_anthropic(user_input: str) -> dict:
+    """Native Anthropic SDK path — tool_use guarantees structured output."""
+    client = get_langfuse_anthropic_client()
+
+    response = invoke_with_retry(
+        lambda: client.messages.create(
+            model=CLASSIFIER_MODEL,
+            max_tokens=1024,
+            temperature=CLASSIFIER_TEMPERATURE,
+            system=CLASSIFIER_PROMPT,
+            messages=[{"role": "user", "content": user_input}],
+            tools=[_EXTRACT_TOOL],
+            tool_choice={"type": "tool", "name": "extract_case_facts"},
+        ),
+        label="Classifier",
+    )
+
+    tool_block = next((b for b in response.content if b.type == "tool_use"), None)
+    if tool_block:
+        return tool_block.input
+    logger.warning("[CLASSIFY] tool_use block missing in response — returning empty extraction")
+    return {}
+
+
+def _run_openai_fallback(user_input: str) -> dict:
+    """OpenAI fallback — LangChain + JSON parse path.
+
+    The main CLASSIFIER_PROMPT is written for tool_use. For OpenAI we append
+    explicit JSON output instructions so the model knows what to return.
+    """
+    from langchain_openai import ChatOpenAI
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import StrOutputParser
+    from app.utils import clean_llm_json
+
+    openai_prompt = CLASSIFIER_PROMPT + """
+
+You MUST respond with valid JSON matching this schema:
+{{
+  "case_category": "cancellation"|"delay"|"downgrade"|"baggage"|"ancillary"|"24hour",
+  "flight_type": "domestic"|"international",
+  "flight_duration_hours": number or null,
+  "delay_hours": number or null,
+  "bag_delay_hours": number or null,
+  "ticket_price": number or null,
+  "ancillary_fee": number or null,
+  "original_class": string or null,
+  "downgraded_class": string or null,
+  "original_class_price": number or null,
+  "downgraded_class_price": number or null,
+  "payment_method": string,
+  "accepted_alternative": true|false,
+  "alternative_type": "rebooking"|"voucher"|"compensation"|"none",
+  "passenger_traveled": true|false,
+  "booking_date": "YYYY-MM-DD" or null,
+  "flight_date": "YYYY-MM-DD" or null,
+  "airline_name": string or null,
+  "flight_number": string or null,
+  "key_facts": ["fact 1", ...]
+}}
+Return ONLY the JSON. No other text."""
+
+    llm = ChatOpenAI(model=OPENAI_AGENT_MODEL, temperature=CLASSIFIER_TEMPERATURE)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", openai_prompt),
+        ("human", "{input}"),
+    ])
+    chain = prompt | llm | StrOutputParser()
+
+    raw = invoke_with_retry(
+        lambda: chain.invoke({"input": user_input}),
+        label="Classifier",
+    )
+    try:
+        return clean_llm_json(raw)
+    except (json.JSONDecodeError, ValueError):
+        return {}
 
 
 def build_case_summary(co: ClassifierOutput) -> str:

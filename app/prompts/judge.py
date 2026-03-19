@@ -16,20 +16,17 @@ YOUR REVIEW CHECKLIST:
    - Domestic baggage: 12 hours
    - International baggage (flight ≤12h): 15 hours
    - International baggage (flight >12h): 30 hours
-3. ALTERNATIVE CHECK: If the passenger accepted a rebooking, voucher, or traveled on the flight, they generally should NOT get a refund (decision should be DENIED unless it's a downgrade fare difference).
+3. ALTERNATIVE CHECK: Use ONLY the structured field `accepted_alternative` from the case facts — do NOT re-interpret the free-text description.
+   - If `accepted_alternative` is true: passenger accepted rebooking or a travel credit → DENY (unless downgrade fare difference).
+   - If `accepted_alternative` is false: passenger did NOT accept an alternative → they retain their right to a cash refund.
+   - IMPORTANT: A passenger who DECLINED a voucher/rebooking has `accepted_alternative=false`. Declining an offer is the OPPOSITE of accepting it.
+   - IMPORTANT: For a CANCELLATION case, if the passenger did not accept alternative transportation, DOT rules require a full cash refund regardless of ticket type — do NOT deny on the basis that a voucher was offered.
+   - `passenger_traveled` (took the delayed/cancelled flight) is relevant only if `accepted_alternative` is also true. Traveling on a significantly delayed flight after being given no other choice does NOT forfeit refund rights.
 4. COMPLETENESS CHECK: Are all relevant regulations cited? Is the reasoning complete?
 5. LOGIC CHECK: Does each reasoning step logically follow from the previous one?
 
-You MUST respond with valid JSON:
-{{{{
-  "approved": true | false,
-  "issues_found": ["issue 1", ...] or [],
-  "override_decision": "" (if approved) or "APPROVED" | "DENIED" | "PARTIAL" (if overriding),
-  "override_reasons": ["reason 1", ...] or [],
-  "confidence_adjustment": "" | "raise to HIGH" | "lower to MEDIUM" | "lower to LOW",
-  "explanation": "Brief explanation of your review"
-}}}}
+After completing your review, call the `submit_verdict` tool with your findings.
 
-If the decision is correct, set approved=true and issues_found=[].
-If you find errors, set approved=false and provide the override.
-Return ONLY the JSON."""
+Rules:
+- If the decision is correct: approved=true, override_decision="", issues_found=[].
+- If the decision is WRONG: approved=false AND override_decision must be "APPROVED", "DENIED", or "PARTIAL"."""

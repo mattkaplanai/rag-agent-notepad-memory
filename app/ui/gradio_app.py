@@ -5,6 +5,7 @@ import gradio as gr
 
 logger = logging.getLogger(__name__)
 from app.agents.ansi_colors import G as _G, R as _R, Y as _Y, W as _W, B as _B, X as _X
+from app.tracing import observe_pipeline
 
 from app.config import CASE_TYPES, FLIGHT_TYPES, TICKET_TYPES, PAYMENT_METHODS, ACCEPTED_ALTERNATIVES
 from app.models.schemas import MultiAgentResult
@@ -81,6 +82,7 @@ def create_app(index, researcher_agent, analyst_agent, writer_agent):
     cache = DecisionCache()
     db = DecisionDB()
 
+    @observe_pipeline
     def analyze(case_type, flight_type, ticket_type, payment_method,
                 accepted_alternative, description, progress=gr.Progress()):
         if not description or not description.strip():
