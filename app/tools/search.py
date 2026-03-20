@@ -3,6 +3,10 @@
 import json
 from langchain_core.tools import tool
 
+# Source file keywords for filtering by document type
+_FEDERAL_KEYWORDS = ("14 cfr", "2024-07177", "usdot_automatic", "usdot_aviation")
+_COMMITMENT_KEYWORDS = ("commitment", "customer_service", "customer service")
+
 
 def make_search_tool(index):
     """Create a document search tool bound to the given index."""
@@ -25,6 +29,56 @@ def make_search_tool(index):
         return chunks_text
 
     return search_regulations
+
+
+def make_federal_regs_tool(index):
+    """Create a search tool filtered to DOT federal regulation documents only."""
+
+    @tool
+    def search_federal_regulations(query: str) -> str:
+        """Search DOT federal regulations only (14 CFR Part 259, USDOT Automatic Refund Rule).
+        Use this to find statutory thresholds, federal rules, and legal requirements."""
+        if index is None:
+            return "No document index available."
+        from app.rag.retriever import hybrid_search
+        result = hybrid_search(index, query, top_k=12)
+        chunks = [
+            c for c in result.chunks
+            if any(kw in c.source_file.lower() for kw in _FEDERAL_KEYWORDS)
+        ]
+        if not chunks:
+            return "No federal regulation documents found for this query."
+        return "\n\n---\n\n".join(
+            f"[Source: {c.source_file} | Relevance: {c.rerank_score:.3f}]\n{c.content}"
+            for c in chunks[:6]
+        )
+
+    return search_federal_regulations
+
+
+def make_commitments_tool(index):
+    """Create a search tool filtered to airline customer service commitments only."""
+
+    @tool
+    def search_airline_commitments(query: str) -> str:
+        """Search airline customer service commitments and voluntary policies.
+        Use this to find what airlines have committed to beyond federal requirements."""
+        if index is None:
+            return "No document index available."
+        from app.rag.retriever import hybrid_search
+        result = hybrid_search(index, query, top_k=12)
+        chunks = [
+            c for c in result.chunks
+            if any(kw in c.source_file.lower() for kw in _COMMITMENT_KEYWORDS)
+        ]
+        if not chunks:
+            return "No airline commitment documents found for this query."
+        return "\n\n---\n\n".join(
+            f"[Source: {c.source_file} | Relevance: {c.rerank_score:.3f}]\n{c.content}"
+            for c in chunks[:6]
+        )
+
+    return search_airline_commitments
 
 
 def get_researcher_tools(index):

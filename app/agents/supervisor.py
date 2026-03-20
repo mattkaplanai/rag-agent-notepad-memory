@@ -5,7 +5,7 @@ import logging
 import time
 
 from app.models.schemas import MultiAgentResult, WorkerOutput
-from app.agents.researcher import run_researcher
+from app.agents.researcher import run_researcher, run_researcher_parallel
 from app.agents.analyst import run_analyst
 from app.agents.writer import run_writer
 
@@ -27,14 +27,21 @@ def run_multi_agent(
     """
     result = MultiAgentResult()
 
-    # Step 1: Researcher
-    result.agent_log.append("📚 **Researcher** — Finding applicable regulations...")
-    logger.info(f"{_C}[RESEARCH] ▶ Starting Researcher agent...{_X}")
-    t0 = time.time()
-    researcher_output = run_researcher(
-        researcher_agent,
-        f"Find all DOT regulations that apply to this case:\n\n{case_summary}",
-    )
+    # Step 1: Researcher (parallel subagents if tuple, single agent otherwise)
+    task = f"Find all DOT regulations that apply to this case:\n\n{case_summary}"
+    if isinstance(researcher_agent, tuple):
+        result.agent_log.append(
+            "📚 **Researcher** — Running 3 parallel subagents "
+            "(Federal Regs / Past Decisions / Airline Commitments)..."
+        )
+        logger.info(f"{_C}[RESEARCH] ▶ Starting 3 parallel researcher subagents...{_X}")
+        t0 = time.time()
+        researcher_output = run_researcher_parallel(researcher_agent, task)
+    else:
+        result.agent_log.append("📚 **Researcher** — Finding applicable regulations...")
+        logger.info(f"{_C}[RESEARCH] ▶ Starting Researcher agent...{_X}")
+        t0 = time.time()
+        researcher_output = run_researcher(researcher_agent, task)
     elapsed = time.time() - t0
     result.researcher_output = WorkerOutput(
         agent_name="Researcher", result=researcher_output, tools_used=["search_regulations"],
