@@ -7,7 +7,7 @@
  * The pipeline takes 15-30 seconds, so we show animated steps
  * that activate based on elapsed time to give feedback.
  */
-export default function LoadingSpinner({ elapsed = 0 }) {
+export default function LoadingSpinner({ elapsed = 0, statusLabel = 'Processing your case...' }) {
   const steps = [
     { label: '🔍 Classifier — extracting case details',    activeAt: 0  },
     { label: '📚 Researcher — searching regulations',      activeAt: 3  },
@@ -19,7 +19,7 @@ export default function LoadingSpinner({ elapsed = 0 }) {
   return (
     <div className="loading-container">
       <div className="spinner" />
-      <p><strong>Processing your case...</strong> ({elapsed}s)</p>
+      <p><strong>{statusLabel}</strong> ({elapsed}s)</p>
       <div className="loading-steps">
         {steps.map((step, i) => {
           const isDone   = elapsed > (steps[i + 1]?.activeAt ?? 999)

@@ -1,4 +1,21 @@
 services:
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  # Redis is the message broker AND result backend.
+  # Broker:  Django puts "job messages" here → Celery workers pick them up
+  # Backend: Workers store results here → Django reads them for polling
+  redis:
+    image: redis:7-alpine
+    container_name: refund-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: refund-postgres
@@ -17,6 +34,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Gradio UI ─────────────────────────────────────────────────────────────────
   gradio:
     build: .
     container_name: refund-gradio
@@ -41,6 +59,12 @@ services:
       retries: 3
       start_period: 60s
 
+  # ── Django API (Gunicorn) ────────────────────────────────────────────────────
+  # WHY GUNICORN instead of "manage.py runserver"?
+  # runserver is single-threaded — it can handle only 1 request at a time.
+  # Gunicorn spawns multiple worker processes (--workers 4) so 4 requests
+  # can be served simultaneously, and HTTP responses are returned fast
+  # because the heavy AI work is offloaded to the Celery worker below.
   django-api:
     build: .
     container_name: refund-api
@@ -50,14 +74,28 @@ services:
       - .env
     environment:
       POSTGRES_HOST: postgres
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - index-data:/app/storage
       - ./data/bilgiler:/app/data/bilgiler
       - django-db:/app/api
-    command: python api/manage.py runserver 0.0.0.0:8000
+    # --workers 4 → 4 parallel HTTP workers
+    # --timeout 30 → each worker only handles fast requests (cache/DB/dispatch)
+    #                AI work happens in the Celery worker, so 30s is enough
+    command: >
+      bash -c "cd api &&
+               python manage.py migrate --noinput &&
+               gunicorn api_project.wsgi:application
+               --bind 0.0.0.0:8000
+               --workers 4
+               --timeout 30
+               --log-level info"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/v1/health/\")'"]
@@ -66,6 +104,45 @@ services:
       retries: 3
       start_period: 30s
 
+  # ── Celery Worker ─────────────────────────────────────────────────────────────
+  # This is the async brain — it runs the AI pipeline in the background.
+  # It uses the SAME Docker image as django-api (same code, different entrypoint).
+  #
+  # HOW IT WORKS:
+  #   1. Django dispatches a task → job message goes to Redis
+  #   2. This worker is always listening to Redis
+  #   3. It picks up the job, runs the AI pipeline (~15-30s)
+  #   4. It stores the result back in Redis
+  #   5. Frontend polling /api/v1/jobs/{id}/ sees SUCCESS and renders the result
+  #
+  # --concurrency 2 → 2 parallel AI pipelines at the same time
+  #                   (increase to 4 on a bigger server)
+  # --loglevel info → verbose logging so you can see what each worker is doing
+  celery-worker:
+    build: .
+    container_name: refund-celery
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - index-data:/app/storage
+      - ./data/bilgiler:/app/data/bilgiler
+    command: >
+      bash -c "cd api &&
+               celery -A api_project worker
+               --loglevel=info
+               --concurrency=2"
+    restart: unless-stopped
+
+  # ── React Frontend ────────────────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend

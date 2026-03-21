@@ -55,6 +55,19 @@ export async function fetchDecision(id) {
 }
 
 /**
+ * Check the status of an async refund decision job.
+ * The frontend calls this every 2 seconds after submitting a case.
+ *
+ * @param {string} jobId - The task ID returned by /analyze/
+ * @returns {Promise<Object>} - { status: "PENDING"|"STARTED"|"SUCCESS"|"FAILURE", result?, error? }
+ */
+export async function fetchJobStatus(jobId) {
+  const response = await fetch(`${BASE_URL}/jobs/${jobId}/`)
+  if (!response.ok) throw new Error('Failed to check job status')
+  return response.json()
+}
+
+/**
  * Check API health.
  * @returns {Promise<Object>} - { status, service, total_decisions }
  */
