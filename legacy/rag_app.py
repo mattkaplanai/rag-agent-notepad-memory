@@ -21,8 +21,8 @@ if not OPENAI_API_KEY:
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
 # Proje kökü ve bilgiler klasörü
-PROJECT_ROOT = Path(__file__).resolve().parent
-BILGILER_DIR = PROJECT_ROOT / "bilgiler"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+BILGILER_DIR = PROJECT_ROOT / "data" / "bilgiler"
 INDEX_DIR = PROJECT_ROOT / "storage"
 
 

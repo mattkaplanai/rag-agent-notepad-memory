@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Download PDF/PPT documents from the USDOT Air Consumer Baggage page into bilgiler/.
+Download PDF/PPT documents from the USDOT Air Consumer Baggage page into data/bilgiler/.
 Source: https://www.transportation.gov/airconsumer/baggage
 
 Run from project root: python scripts/download_baggage_docs.py
 Requires: requests (install with pip install requests if needed).
 
 Note: transportation.gov often returns 403 Forbidden for scripted requests. If that
-happens, use the link list in bilgiler/USDOT_baggage_page_links.md and download
-each "View PDF" / "Link" manually (e.g. open in browser → Save as → save to bilgiler).
+happens, use the link list in data/bilgiler/USDOT_baggage_page_links.md and download
+each "View PDF" / "Link" manually (e.g. open in browser → Save as → save to data/bilgiler).
 """
 
 import os
@@ -24,7 +24,7 @@ except ImportError:
 
 # Project root: parent of scripts/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-BILGILER = PROJECT_ROOT / "bilgiler"
+BILGILER = PROJECT_ROOT / "data" / "bilgiler"
 BAGGAAGE_PAGE_URL = "https://www.transportation.gov/airconsumer/baggage"
 
 # (filename_stem, url) – stem used for filename; extension inferred from response or URL

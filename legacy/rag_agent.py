@@ -94,8 +94,8 @@ if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY bulunamadı. .env dosyasına ekleyin.")
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-BILGILER_DIR = PROJECT_ROOT / "bilgiler"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+BILGILER_DIR = PROJECT_ROOT / "data" / "bilgiler"
 INDEX_DIR = PROJECT_ROOT / "storage"
 
 # Kısa bellek: son kaç tur sohbet agent'a verilecek
