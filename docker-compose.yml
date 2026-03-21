@@ -84,18 +84,10 @@ services:
     volumes:
       - index-data:/app/storage
       - ./data/bilgiler:/app/data/bilgiler
-      - django-db:/app/api
     # --workers 4 → 4 parallel HTTP workers
     # --timeout 30 → each worker only handles fast requests (cache/DB/dispatch)
     #                AI work happens in the Celery worker, so 30s is enough
-    command: >
-      bash -c "cd api &&
-               python manage.py migrate --noinput &&
-               gunicorn api_project.wsgi:application
-               --bind 0.0.0.0:8000
-               --workers 4
-               --timeout 30
-               --log-level info"
+    command: bash -c "cd api && python manage.py migrate --noinput && gunicorn api_project.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 30 --log-level info"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/v1/health/\")'"]
@@ -135,11 +127,7 @@ services:
     volumes:
       - index-data:/app/storage
       - ./data/bilgiler:/app/data/bilgiler
-    command: >
-      bash -c "cd api &&
-               celery -A api_project worker
-               --loglevel=info
-               --concurrency=2"
+    command: bash -c "cd api && celery -A api_project worker --loglevel=info --concurrency=2"
     restart: unless-stopped
 
   # ── React Frontend ────────────────────────────────────────────────────────────
@@ -157,5 +145,4 @@ services:
 
 volumes:
   index-data:
-  django-db:
   postgres-data:
