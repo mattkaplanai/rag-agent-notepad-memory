@@ -11,5 +11,6 @@ router.register(r'decisions', views.RefundDecisionViewSet)
 urlpatterns = [
     path('health/', views.health_check, name='health-check'),
     path('analyze/', views.analyze_case, name='analyze-case'),
+    path('jobs/<str:job_id>/', views.job_status, name='job-status'),
     path('', include(router.urls)),
 ]

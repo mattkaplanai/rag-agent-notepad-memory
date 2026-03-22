@@ -80,7 +80,7 @@ Judge              — validates decision, overrides if wrong
 | `app/guards/input_guard.py` | Blocks prompt injection, PII, off-topic requests |
 | `app/guards/output_guard.py` | Validates decision enum, enforces ERROR on bad output |
 | `app/rag/retriever.py` | Hybrid search: vector + BM25 + rerank |
-| `api/decisions/views.py` | Django REST endpoints (`_cache`, `_db` are module-level singletons) |
+| `api/decisions/views.py` | Django REST endpoints (`_get_cache()`, `_get_db()` are lazy singletons — initialized on first request) |
 
 ---
 
@@ -112,7 +112,7 @@ Tests use mocked OpenAI embeddings — no API calls needed.
 - **ANSI colors**: always import from `app/agents/ansi_colors.py` — never define inline
 - **Tool logging**: use `make_tool_logger(label)` from `app/agents/tool_logger.py`
 - **LLM calls**: always wrap with `invoke_with_retry(lambda: ..., label="...")` from `app/agents/retry.py`
-- **Cache/DB**: `DecisionCache()` and `DecisionDB()` are module-level singletons in `views.py` — don't instantiate per-request
+- **Cache/DB**: use `_get_cache()` and `_get_db()` in `views.py` — lazy singletons, initialized on first request (not at import time, to avoid build-time failures)
 - **Hashing**: use `hash_inputs()` from `app/utils.py` — never write SHA256 inline
 - **JSON parsing**: use `clean_llm_json()` from `app/utils.py` — handles markdown fences
 
@@ -121,7 +121,7 @@ Tests use mocked OpenAI embeddings — no API calls needed.
 ## Things NOT to do
 
 - Don't define ANSI color codes inline — use `ansi_colors.py`
-- Don't instantiate `DecisionCache()` or `DecisionDB()` inside request handlers
+- Don't instantiate `DecisionCache()` or `DecisionDB()` at module level or inside request handlers — use `_get_cache()` / `_get_db()`
 - Don't call `agent.invoke()` or `chain.invoke()` directly — wrap with `invoke_with_retry()`
 - Don't delete `storage/` (Chroma index) without also clearing the cache — causes dimension mismatch
 - Don't change `OPENAI_EMBEDDING_MODEL` without running `scripts/clear_decision_data.py` first

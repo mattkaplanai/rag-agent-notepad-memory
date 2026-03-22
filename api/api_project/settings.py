@@ -68,7 +68,7 @@ CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "False") == "True"
 CORS_ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://localhost:7861,http://127.0.0.1:7861"
+        "http://localhost:7861,http://127.0.0.1:7861,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"
     ).split(",") if o.strip()
 ]
 
@@ -143,3 +143,36 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# ── Celery / Redis configuration ──────────────────────────────────────────────
+#
+# BROKER:  Redis holds the queue of jobs waiting to be processed.
+#          When a view calls task.delay(), the job goes here.
+# BACKEND: Redis also stores each task's result (SUCCESS/FAILURE + data).
+#          When the frontend polls /api/v1/jobs/{id}/, we read from here.
+#
+# In docker-compose, the Redis container is named "redis" so the host is "redis".
+# Locally (without Docker), it defaults to localhost.
+# ── Django Cache → Redis (used by django-ratelimit) ───────────────────────────
+#
+# django-ratelimit needs Django's cache framework to store counters.
+# We point it at Redis db=1 (Celery uses db=0, so no collision).
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f'{REDIS_URL}/1',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'TIMEOUT': 300,  # 5 minutes default TTL
+    }
+}
+
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_TRACK_STARTED = True   # lets us show "STARTED" status to the frontend
+CELERY_RESULT_EXPIRES = 3600       # results live in Redis for 1 hour, then auto-deleted
