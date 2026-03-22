@@ -17,7 +17,4 @@ COPY app/ ./app/
 COPY api/ ./api/
 COPY data/ ./data/
 
-# Run Django migrations at build time
-RUN cd api && python manage.py migrate --noinput
-
 EXPOSE 7861 8000

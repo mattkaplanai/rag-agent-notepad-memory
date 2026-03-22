@@ -1,0 +1,30 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "All Services (Docker Compose)",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd /Users/mehmetkaymak/Desktop/rag-agent-notepad-memory && docker compose up --build"],
+      "port": 7861
+    },
+    {
+      "name": "Gradio App",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd /Users/mehmetkaymak/Desktop/rag-agent-notepad-memory && docker compose up gradio"],
+      "port": 7861
+    },
+    {
+      "name": "Django API",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd /Users/mehmetkaymak/Desktop/rag-agent-notepad-memory && docker compose up django-api"],
+      "port": 8000,
+      "autoPort": false
+    },
+    {
+      "name": "PostgreSQL",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd /Users/mehmetkaymak/Desktop/rag-agent-notepad-memory && docker compose up postgres"],
+      "port": 5432
+    }
+  ]
+}

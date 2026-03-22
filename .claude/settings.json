@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUseFailure": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '\"[\\(now | strftime(\"%Y-%m-%dT%H:%M:%SZ\"))] [\\(.tool_name)] \\(.tool_response.error // \"unknown error\")\"' >> ~/.claude/tool-failures.log 2>/dev/null || true",
+            "statusMessage": "Logging tool failure..."
+          }
+        ]
+      }
+    ]
+  }
+}

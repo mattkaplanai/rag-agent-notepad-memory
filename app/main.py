@@ -11,7 +11,7 @@ import logging
 
 from app.config import SERVER_HOST, SERVER_PORT, ensure_anthropic_or_fallback
 from app.rag.indexer import build_or_load_index
-from app.agents.researcher import build_researcher
+from app.agents.researcher import build_researcher_parallel
 from app.agents.analyst import build_analyst
 from app.agents.writer import build_writer
 from app.ui.gradio_app import create_app
@@ -32,7 +32,7 @@ def main():
     ensure_anthropic_or_fallback(logger)
 
     logger.info("Building worker agents...")
-    researcher_agent = build_researcher(index)
+    researcher_agent = build_researcher_parallel(index)
     analyst_agent = build_analyst()
     writer_agent = build_writer()
 

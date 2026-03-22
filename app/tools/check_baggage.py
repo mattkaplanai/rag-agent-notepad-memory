@@ -2,6 +2,12 @@
 
 import json
 from langchain_core.tools import tool
+from app.config import (
+    BAGGAGE_THRESHOLD_DOMESTIC_HOURS,
+    BAGGAGE_THRESHOLD_INTL_SHORT_HOURS,
+    BAGGAGE_THRESHOLD_INTL_LONG_HOURS,
+    BAGGAGE_INTL_FLIGHT_DURATION_CUTOFF,
+)
 
 
 @tool
@@ -15,15 +21,15 @@ def check_baggage_threshold(flight_type: str, flight_duration_hours: float, bag_
     flight_type = flight_type.strip().lower()
 
     if "domestic" in flight_type:
-        threshold = 12.0
-        rule = f"Domestic flights: bag must arrive within 12 hours"
+        threshold = BAGGAGE_THRESHOLD_DOMESTIC_HOURS
+        rule = f"Domestic flights: bag must arrive within {threshold} hours"
     elif "international" in flight_type:
-        if flight_duration_hours <= 12:
-            threshold = 15.0
-            rule = f"International flight ≤12 hours (actual: {flight_duration_hours}h): bag must arrive within 15 hours"
+        if flight_duration_hours <= BAGGAGE_INTL_FLIGHT_DURATION_CUTOFF:
+            threshold = BAGGAGE_THRESHOLD_INTL_SHORT_HOURS
+            rule = f"International flight ≤{BAGGAGE_INTL_FLIGHT_DURATION_CUTOFF}h (actual: {flight_duration_hours}h): bag must arrive within {threshold} hours"
         else:
-            threshold = 30.0
-            rule = f"International flight >12 hours (actual: {flight_duration_hours}h): bag must arrive within 30 hours"
+            threshold = BAGGAGE_THRESHOLD_INTL_LONG_HOURS
+            rule = f"International flight >{BAGGAGE_INTL_FLIGHT_DURATION_CUTOFF}h (actual: {flight_duration_hours}h): bag must arrive within {threshold} hours"
     else:
         return json.dumps({"error": f"Unknown flight type: {flight_type}. Use 'domestic' or 'international'."})
 

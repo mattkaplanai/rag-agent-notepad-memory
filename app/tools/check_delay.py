@@ -2,6 +2,7 @@
 
 import json
 from langchain_core.tools import tool
+from app.config import DELAY_THRESHOLD_DOMESTIC_HOURS, DELAY_THRESHOLD_INTL_HOURS
 
 
 @tool
@@ -13,11 +14,11 @@ def check_delay_threshold(flight_type: str, delay_hours: float) -> str:
     flight_type = flight_type.strip().lower()
 
     if "domestic" in flight_type:
-        threshold = 3.0
-        rule = "Domestic flights: 3+ hours = significant delay"
+        threshold = DELAY_THRESHOLD_DOMESTIC_HOURS
+        rule = f"Domestic flights: {threshold}+ hours = significant delay"
     elif "international" in flight_type:
-        threshold = 6.0
-        rule = "International flights: 6+ hours = significant delay"
+        threshold = DELAY_THRESHOLD_INTL_HOURS
+        rule = f"International flights: {threshold}+ hours = significant delay"
     else:
         return json.dumps({"error": f"Unknown flight type: {flight_type}. Use 'domestic' or 'international'."})
 

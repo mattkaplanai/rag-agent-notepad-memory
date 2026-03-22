@@ -21,11 +21,20 @@ def hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_al
 
 
 def clean_llm_json(raw: str) -> dict:
-    """Strip markdown fences and parse JSON from LLM output."""
+    """Strip markdown fences and parse JSON from LLM output.
+
+    Handles three cases:
+    1. Bare JSON (no fences)
+    2. Output starts with ```json fence
+    3. Output contains reasoning text followed by a ```json fence (GPT-4o-mini style)
+    """
     cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
+
+    # Look for any ```json ... ``` block anywhere in the output
+    if "```" in cleaned:
+        import re
+        match = re.search(r"```(?:json)?\s*\n?([\s\S]*?)```", cleaned)
+        if match:
+            cleaned = match.group(1).strip()
+
     return json.loads(cleaned)
