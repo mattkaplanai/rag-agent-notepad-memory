@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "category": "delay_domestic",
+    "question": "What is the minimum delay duration that qualifies as a significant delay for a domestic flight under DOT rules?",
+    "ground_truth": "3 hours. DOT's Automatic Refund Rule (effective 2024) defines a domestic flight delay of 3 hours or more as significant, entitling the passenger to a full refund."
+  },
+  {
+    "id": 2,
+    "category": "delay_international",
+    "question": "What is the minimum delay duration that qualifies as a significant delay for an international flight under DOT rules?",
+    "ground_truth": "6 hours. DOT defines an international flight delay of 6 hours or more as significant, entitling the passenger to a full refund."
+  },
+  {
+    "id": 3,
+    "category": "refund_timeline_credit_card",
+    "question": "How many days does an airline have to issue a refund to a credit card after a qualifying cancellation or delay?",
+    "ground_truth": "7 business days. Under DOT regulations, airlines must process credit card refunds within 7 business days of the refund being due."
+  },
+  {
+    "id": 4,
+    "category": "refund_timeline_other",
+    "question": "How long does an airline have to refund a passenger who paid by check or cash?",
+    "ground_truth": "20 calendar days. For payments made by methods other than credit card (e.g., cash, check, debit), airlines must issue refunds within 20 calendar days."
+  },
+  {
+    "id": 5,
+    "category": "24_hour_rule",
+    "question": "Can a passenger get a full refund if they cancel a ticket within 24 hours of booking?",
+    "ground_truth": "Yes, provided the booking was made at least 7 days before the scheduled departure. Under DOT's 24-hour rule, airlines must either allow a free 24-hour hold or provide a full refund for cancellations within 24 hours of purchase."
+  },
+  {
+    "id": 6,
+    "category": "cancellation_nonrefundable",
+    "question": "Is a passenger entitled to a refund if the airline cancels their non-refundable ticket flight?",
+    "ground_truth": "Yes. When an airline cancels a flight, passengers are entitled to a full refund regardless of whether the ticket was refundable or non-refundable. The non-refundable status applies only to voluntary cancellations by the passenger."
+  },
+  {
+    "id": 7,
+    "category": "tarmac_delay_domestic",
+    "question": "How long can a domestic flight be held on the tarmac before passengers must be allowed to deplane?",
+    "ground_truth": "3 hours. DOT's tarmac delay rule prohibits domestic carriers from keeping passengers on board for more than 3 hours without allowing them to deplane, with exceptions for safety or security reasons."
+  },
+  {
+    "id": 8,
+    "category": "tarmac_delay_international",
+    "question": "What is the maximum tarmac delay time allowed for international flights before deplaning must be offered?",
+    "ground_truth": "4 hours. International flights are subject to a 4-hour tarmac delay limit before airlines must offer passengers the opportunity to deplane."
+  },
+  {
+    "id": 9,
+    "category": "baggage_fee_refund",
+    "question": "When must an airline refund checked baggage fees to a passenger?",
+    "ground_truth": "Airlines must refund checked baggage fees if the bag is significantly delayed, damaged, or lost. If a passenger pays for checked baggage and the flight is cancelled or significantly delayed, the baggage fee must also be refunded."
+  },
+  {
+    "id": 10,
+    "category": "involuntary_denied_boarding",
+    "question": "What compensation is a passenger entitled to if involuntarily denied boarding due to overbooking and the airline provides alternate transport with a delay of 1-2 hours domestically?",
+    "ground_truth": "200% of the one-way fare, up to $775. For involuntary denied boarding with a domestic arrival delay of 1-2 hours, DOT requires compensation of 200% of the one-way fare to the destination, capped at $775."
+  },
+  {
+    "id": 11,
+    "category": "involuntary_denied_boarding_long",
+    "question": "What is the compensation for involuntary denied boarding when the alternate domestic flight arrives more than 2 hours late compared to the original?",
+    "ground_truth": "400% of the one-way fare, up to $1,550. When the substitute transportation arrives more than 2 hours after the original arrival time domestically (4 hours internationally), the compensation doubles to 400% of the one-way fare, capped at $1,550."
+  },
+  {
+    "id": 12,
+    "category": "schedule_change",
+    "question": "Does a significant airline schedule change entitle a passenger to a full refund?",
+    "ground_truth": "Yes. DOT's Automatic Refund Rule requires airlines to offer full refunds for significant schedule changes, including departure or arrival time changes that result in a delay meeting the significance thresholds (3 hours domestic, 6 hours international)."
+  },
+  {
+    "id": 13,
+    "category": "refund_original_payment",
+    "question": "Can an airline issue a travel voucher instead of a cash refund for a cancelled flight without passenger consent?",
+    "ground_truth": "No. Under DOT rules, airlines must refund the original form of payment unless the passenger voluntarily accepts a voucher or travel credit. Offering only a voucher when a cash refund is owed is a violation of DOT refund regulations."
+  },
+  {
+    "id": 14,
+    "category": "award_ticket_refund",
+    "question": "Are passengers with award (frequent flyer) tickets entitled to refunds when the airline cancels their flight?",
+    "ground_truth": "Yes. DOT refund rules apply to award tickets. When an airline cancels a flight, passengers with award tickets must have their miles or points reinstated and any fees or co-pays refunded."
+  },
+  {
+    "id": 15,
+    "category": "seat_downgrade",
+    "question": "Is a passenger entitled to compensation if the airline involuntarily downgrades them to a lower class of service?",
+    "ground_truth": "Yes. Passengers involuntarily downgraded to a lower class of service are entitled to a refund of the fare difference between the class paid for and the class flown."
+  },
+  {
+    "id": 16,
+    "category": "weather_cancellation",
+    "question": "If a flight is cancelled due to weather, is the passenger still entitled to a refund?",
+    "ground_truth": "Yes. DOT regulations require airlines to refund passengers for cancelled flights regardless of the reason, including weather-related cancellations. The airline is not required to provide additional compensation, but the ticket refund is mandatory."
+  },
+  {
+    "id": 17,
+    "category": "delay_refund_right",
+    "question": "If a domestic flight is delayed 4 hours and the passenger chooses not to travel, are they entitled to a refund?",
+    "ground_truth": "Yes. A 4-hour domestic delay exceeds the 3-hour significant delay threshold under DOT's Automatic Refund Rule. Passengers who choose not to travel due to a significant delay are entitled to a full refund of the unused portion of their ticket."
+  },
+  {
+    "id": 18,
+    "category": "amenities_during_delay",
+    "question": "Are US airlines legally required to provide meals or hotel accommodation during long delays?",
+    "ground_truth": "No federal law requires airlines to provide meals, hotels, or other amenities during delays. However, many airlines commit to providing these as part of their customer service plans filed with DOT. Requirements apply only during tarmac delays (food/water after 2 hours on tarmac)."
+  },
+  {
+    "id": 19,
+    "category": "refund_process",
+    "question": "What must a passenger do to request a refund for a cancelled flight under DOT rules?",
+    "ground_truth": "Passengers should submit a refund request directly to the airline. Under DOT's Automatic Refund Rule, airlines are required to automatically issue refunds for cancelled flights and significant delays without requiring passengers to affirmatively request them."
+  },
+  {
+    "id": 20,
+    "category": "codeshare_delay",
+    "question": "If a passenger's flight is operated by a partner airline on a codeshare, which airline is responsible for the refund when the flight is cancelled?",
+    "ground_truth": "The airline that sold the ticket (the ticketing carrier) is generally responsible for processing the refund. Passengers should contact the carrier from whom they purchased the ticket, who is then responsible for coordinating with the operating carrier."
+  }
+]

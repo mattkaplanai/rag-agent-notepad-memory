@@ -42,3 +42,7 @@ langfuse>=3.0.0,<4.0.0
 celery[redis]>=5.3.0
 redis>=5.0.0
 gunicorn>=21.0.0
+
+# Offline evaluation
+ragas>=0.1.0,<0.2.0
+datasets>=2.14.0
