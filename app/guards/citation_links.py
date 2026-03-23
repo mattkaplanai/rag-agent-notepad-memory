@@ -6,7 +6,6 @@ whole part) so the user lands on the relevant part of the document, not the top 
 a long page. Add entries to CITATION_MAP to support more docs.
 """
 
-from pathlib import Path
 from typing import Optional, Tuple
 
 # (pattern_substring, url, optional_display_title)

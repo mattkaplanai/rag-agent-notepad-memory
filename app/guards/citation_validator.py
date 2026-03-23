@@ -15,10 +15,10 @@ the project grows (more regulations, more agents).
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from citation_links import get_citation_link
+from app.guards.citation_links import get_citation_link
 
 
-# Section header the Researcher is prompted to output (must match multi_agent.RESEARCHER_PROMPT)
+# Section header the Researcher is prompted to output (must match researcher prompt)
 APPLICABLE_RULES_HEADER = "APPLICABLE RULES FOR CITATION"
 
 
@@ -72,19 +72,16 @@ def _extract_researcher_cited_rules(researcher_output: Optional[str]) -> List[st
         return []
     text = researcher_output.strip()
     header = APPLICABLE_RULES_HEADER.upper()
-    # Find section: look for the header (case-insensitive)
     idx = text.upper().find(header)
     if idx == -1:
         return []
-    # Start after the header line
-    rest = text[idx + len(header) :].lstrip()
+    rest = text[idx + len(header):].lstrip()
     lines = rest.splitlines()
     rules = []
     for line in lines:
         line = line.strip()
         if not line:
             break
-        # Skip lines that look like section separators or markdown
         if line.startswith("#") or line.startswith("---") or line.upper() == line and len(line) > 3:
             break
         rules.append(line)
@@ -95,7 +92,6 @@ def _normalize_rule_for_match(reg: str) -> str:
     """Normalize a regulation string for fuzzy matching (e.g. Writer vs Researcher)."""
     if not reg:
         return ""
-    # Take the part before " — " or " - " as the canonical name; else use first segment
     for sep in (" — ", " - ", " – "):
         if sep in reg:
             reg = reg.split(sep)[0].strip()
@@ -117,7 +113,7 @@ def _rule_in_researcher_list(reg: str, researcher_rules: List[str]) -> bool:
 
 
 def _citation_in_retrieval(reg: str, retrieval_chunks: List[str]) -> bool:
-    """True if the regulation name (e.g. 14 CFR 259.4) appears in any retrieval chunk (case-insensitive)."""
+    """True if the regulation name appears in any retrieval chunk (case-insensitive)."""
     if not retrieval_chunks or not reg:
         return False
     norm = _normalize_rule_for_match(reg)

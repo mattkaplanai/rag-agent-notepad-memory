@@ -59,7 +59,7 @@ def _check_citations(final_decision: dict) -> str | None:
     Returns block reason when citations are invalid (e.g. not grounded), else None.
     """
     try:
-        from citation_validator import validate_citations
+        from app.guards.citation_validator import validate_citations
     except ImportError:
         return None
 
