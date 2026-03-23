@@ -60,6 +60,17 @@ def analyze_case(request):
 
     data = serializer.validated_data
 
+    # Resolve tenant — unknown slug is rejected immediately
+    tenant_slug = data.get('tenant_id', '')
+    if tenant_slug:
+        try:
+            Tenant.objects.get(slug=tenant_slug, is_active=True)
+        except Tenant.DoesNotExist:
+            return Response(
+                {'error': f"Unknown tenant: '{tenant_slug}'. Register this airline first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     # Input guard: block unsafe or off-topic requests before queuing
     from app.guards import run_input_guard
     input_result = run_input_guard(data)
@@ -150,10 +161,18 @@ class RefundDecisionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     List and retrieve past refund decisions.
 
-    GET /api/v1/decisions/        → list all decisions (paginated)
-    GET /api/v1/decisions/{id}/   → get a specific decision
+    GET /api/v1/decisions/                    → list all decisions (paginated)
+    GET /api/v1/decisions/?tenant_id=delta    → list decisions for one tenant
+    GET /api/v1/decisions/{id}/               → get a specific decision
     """
-    queryset = RefundDecision.objects.all()
+    queryset = RefundDecision.objects.select_related('tenant').all()
+
+    def get_queryset(self):
+        qs = RefundDecision.objects.select_related('tenant').all()
+        tenant_slug = self.request.query_params.get('tenant_id')
+        if tenant_slug:
+            qs = qs.filter(tenant__slug=tenant_slug)
+        return qs
 
     def get_serializer_class(self):
         if self.action == 'list':

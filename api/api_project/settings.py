@@ -160,3 +160,16 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_TRACK_STARTED = True   # lets us show "STARTED" status to the frontend
 CELERY_RESULT_EXPIRES = 3600       # results live in Redis for 1 hour, then auto-deleted
+
+# ── Celery Beat — scheduled ingestion pipeline ────────────────────────────────
+# Runs the document ingestion job on a schedule.
+# Beat compares the current doc_manifest against the last active version;
+# if nothing changed it exits in <1s, so running daily is free.
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'refresh-index-daily': {
+        'task': 'decisions.refresh_index',
+        'schedule': crontab(hour=2, minute=0),  # Daily at 02:00 UTC
+    },
+}

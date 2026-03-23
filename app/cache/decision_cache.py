@@ -8,7 +8,6 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from app.config import CACHE_FILE, EMBEDDING_MODEL, EMBEDDING_TIMEOUT, EXCEL_FILE, SEMANTIC_THRESHOLD
 from app.utils import cosine_similarity, hash_inputs
@@ -105,13 +104,17 @@ class DecisionCache:
         ws.freeze_panes = "A2"
         wb.save(str(EXCEL_FILE))
 
-    def lookup(self, case_type, flight_type, ticket_type, payment_method, accepted_alternative, description):
+    def lookup(self, case_type, flight_type, ticket_type, payment_method, accepted_alternative, description, tenant_id=''):
         """Look up a decision. Returns (result, status, query_embedding).
 
         The query_embedding is returned so callers can pass it to store()
         without re-computing it (avoids a redundant OpenAI API call).
+
+        Cache keys are scoped per tenant — Delta and United never share cached results.
         """
         input_hash = hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description)
+        if tenant_id:
+            input_hash = f"{tenant_id}:{input_hash}"
 
         for entry in self.entries:
             if entry.get("hash") == input_hash:
@@ -139,14 +142,17 @@ class DecisionCache:
         logger.info("Cache miss (best similarity %.3f).", best_sim)
         return None, "miss", query_embedding
 
-    def store(self, case_type, flight_type, ticket_type, payment_method, accepted_alternative, description, result, embedding=None):
+    def store(self, case_type, flight_type, ticket_type, payment_method, accepted_alternative, description, result, embedding=None, tenant_id=''):
         """Store a decision. Pass embedding from lookup() to avoid redundant API call."""
         input_hash = hash_inputs(case_type, flight_type, ticket_type, payment_method, accepted_alternative, description)
+        if tenant_id:
+            input_hash = f"{tenant_id}:{input_hash}"
         if embedding is None and description.strip():
             embedding = _get_embedding(description)
 
         self.entries.append({
-            "hash": input_hash, "case_type": case_type, "flight_type": flight_type,
+            "hash": input_hash, "tenant_id": tenant_id,
+            "case_type": case_type, "flight_type": flight_type,
             "ticket_type": ticket_type, "payment_method": payment_method,
             "accepted_alternative": accepted_alternative, "description_preview": description[:200],
             "embedding": embedding or [], "result": result, "timestamp": time.time(),

@@ -8,7 +8,7 @@ When POSTGRES_HOST is not set, all operations silently no-op.
 import json
 import logging
 from contextlib import contextmanager
-from typing import List, Optional
+from typing import Optional
 
 from app.config import (
     DB_SEMANTIC_THRESHOLD,
@@ -79,7 +79,8 @@ def _create_table(conn) -> None:
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
                 id SERIAL PRIMARY KEY,
-                input_hash VARCHAR(64) UNIQUE NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT '',
+                input_hash VARCHAR(64) NOT NULL,
                 case_type TEXT,
                 flight_type TEXT,
                 ticket_type TEXT,
@@ -88,8 +89,14 @@ def _create_table(conn) -> None:
                 description_preview TEXT,
                 embedding JSONB,
                 result JSONB NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW()
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE (tenant_id, input_hash)
             );
+        """)
+        # Add tenant_id to existing tables that were created before multi-tenancy
+        cur.execute(f"""
+            ALTER TABLE {TABLE_NAME}
+            ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT '';
         """)
 
 
@@ -121,8 +128,9 @@ class DecisionDB:
         payment_method: str,
         accepted_alternative: str,
         description: str,
+        tenant_id: str = '',
     ) -> Optional[dict]:
-        """Exact lookup by input hash. Returns result dict or None."""
+        """Exact lookup by input hash scoped to tenant. Returns result dict or None."""
         if not self._enabled:
             return None
         input_hash = hash_inputs(
@@ -134,8 +142,8 @@ class DecisionDB:
                 return None
             with conn.cursor() as cur:
                 cur.execute(
-                    f"SELECT result FROM {TABLE_NAME} WHERE input_hash = %s",
-                    (input_hash,),
+                    f"SELECT result FROM {TABLE_NAME} WHERE tenant_id = %s AND input_hash = %s",
+                    (tenant_id, input_hash),
                 )
                 row = cur.fetchone()
                 if row and row.get("result"):
@@ -148,8 +156,9 @@ class DecisionDB:
         self,
         query_embedding: list[float],
         threshold: float = DB_SEMANTIC_THRESHOLD,
+        tenant_id: str = '',
     ) -> Optional[dict]:
-        """Find best match by cosine similarity. Returns result dict or None."""
+        """Find best match by cosine similarity scoped to tenant. Returns result dict or None."""
         if not self._enabled or not query_embedding:
             return None
         with _connection() as conn:
@@ -158,7 +167,8 @@ class DecisionDB:
             with conn.cursor() as cur:
                 cur.execute(
                     f"SELECT embedding, result FROM {TABLE_NAME} "
-                    f"WHERE embedding IS NOT NULL AND jsonb_array_length(embedding) > 0"
+                    f"WHERE tenant_id = %s AND embedding IS NOT NULL AND jsonb_array_length(embedding) > 0",
+                    (tenant_id,),
                 )
                 rows = cur.fetchall()
         if not rows:
@@ -194,8 +204,9 @@ class DecisionDB:
         description: str,
         result: dict,
         embedding: Optional[list[float]] = None,
+        tenant_id: str = '',
     ) -> None:
-        """Insert a decision. Embedding stored as JSONB for semantic lookup."""
+        """Insert a decision scoped to tenant. Embedding stored as JSONB for semantic lookup."""
         if not self._enabled:
             return
         input_hash = hash_inputs(
@@ -209,12 +220,13 @@ class DecisionDB:
                 cur.execute(
                     f"""
                     INSERT INTO {TABLE_NAME}
-                    (input_hash, case_type, flight_type, ticket_type, payment_method,
+                    (tenant_id, input_hash, case_type, flight_type, ticket_type, payment_method,
                      accepted_alternative, description_preview, embedding, result)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)
-                    ON CONFLICT (input_hash) DO NOTHING
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)
+                    ON CONFLICT (tenant_id, input_hash) DO NOTHING
                     """,
                     (
+                        tenant_id,
                         input_hash,
                         case_type,
                         flight_type,

@@ -1,11 +1,21 @@
 """Django REST Framework serializers for the refund API."""
 
 from rest_framework import serializers
-from .models import RefundDecision
+from .models import RefundDecision, Tenant
+
+
+class TenantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tenant
+        fields = ['slug', 'name']
 
 
 class RefundRequestSerializer(serializers.Serializer):
     """Serializer for incoming refund analysis requests."""
+
+    # Optional airline tenant slug — e.g. "delta", "united".
+    # Requests without tenant_id are accepted (backwards compatible) and stored with tenant=NULL.
+    tenant_id = serializers.SlugField(required=False, allow_blank=True, default='')
 
     case_type = serializers.ChoiceField(choices=[
         'Flight Cancellation',
@@ -39,6 +49,8 @@ class RefundRequestSerializer(serializers.Serializer):
 class RefundDecisionSerializer(serializers.ModelSerializer):
     """Serializer for refund decision responses."""
 
+    tenant = TenantSerializer(read_only=True)
+
     class Meta:
         model = RefundDecision
         fields = '__all__'
@@ -47,10 +59,12 @@ class RefundDecisionSerializer(serializers.ModelSerializer):
 class RefundDecisionListSerializer(serializers.ModelSerializer):
     """Compact serializer for listing decisions."""
 
+    tenant = TenantSerializer(read_only=True)
+
     class Meta:
         model = RefundDecision
         fields = [
-            'id', 'case_type', 'flight_type', 'airline_name',
+            'id', 'tenant', 'case_type', 'flight_type', 'airline_name',
             'flight_number', 'decision', 'confidence',
             'processing_time_seconds', 'created_at',
         ]

@@ -53,7 +53,11 @@ services:
     command: python -m app.main
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:7861\")'"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c ''import urllib.request; urllib.request.urlopen("http://localhost:7861")''',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -90,7 +94,11 @@ services:
     command: bash -c "cd api && python manage.py migrate --noinput && gunicorn api_project.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 30 --log-level info"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/v1/health/\")'"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c ''import urllib.request; urllib.request.urlopen("http://localhost:8000/api/v1/health/")''',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -128,6 +136,33 @@ services:
       - index-data:/app/storage
       - ./data/bilgiler:/app/data/bilgiler
     command: bash -c "cd api && celery -A api_project worker --loglevel=info --concurrency=2"
+    restart: unless-stopped
+
+  # ── Celery Beat (scheduler) ──────────────────────────────────────────────────
+  # Beat sends the 'decisions.refresh_index' task to Redis every day at 02:00 UTC.
+  # The Celery worker picks it up and runs the ingestion pipeline.
+  #
+  # Only ONE Beat process should ever run — running two causes duplicate task
+  # submissions.  Beat itself is stateless; the lock is in Redis via the
+  # default PersistentScheduler (celerybeat-schedule file).
+  celery-beat:
+    build: .
+    container_name: refund-beat
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - index-data:/app/storage
+      - ./data/bilgiler:/app/data/bilgiler
+    command: bash -c "cd api && celery -A api_project beat --loglevel=info"
     restart: unless-stopped
 
   # ── React Frontend ────────────────────────────────────────────────────────────
