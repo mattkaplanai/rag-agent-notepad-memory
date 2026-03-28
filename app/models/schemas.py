@@ -30,6 +30,7 @@ class ClassifierOutput:
     flight_number: str = ""
     key_facts: list[str] = field(default_factory=list)
     raw_description: str = ""
+    frustration_level: str = "LOW"
 
 
 @dataclass

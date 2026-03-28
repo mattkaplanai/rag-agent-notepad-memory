@@ -27,6 +27,7 @@ from app.config import (
 )
 from app.prompts.classifier import CLASSIFIER_PROMPT
 from app.models.schemas import ClassifierOutput
+from app.nlp.sentiment import analyze_sentiment
 
 
 # Every field maps 1-to-1 with ClassifierOutput.
@@ -182,6 +183,7 @@ def run_classifier(
         data = _run_anthropic(user_input)
 
     elapsed = time.time() - t0
+    frustration_level = analyze_sentiment(description)
 
     co = ClassifierOutput(
         case_category=data.get("case_category", ""),
@@ -205,11 +207,13 @@ def run_classifier(
         flight_number=data.get("flight_number", ""),
         key_facts=data.get("key_facts", []),
         raw_description=description,
+        frustration_level=frustration_level,
     )
     logger.info(
         f"{_G}[CLASSIFY] ✓ Done in {elapsed:.1f}s — "
         f"Category: {co.case_category} | Delay: {co.delay_hours}h | "
-        f"Price: ${co.ticket_price} | Airline: {co.airline_name}{_X}"
+        f"Price: ${co.ticket_price} | Airline: {co.airline_name} | "
+        f"Frustration: {co.frustration_level}{_X}"
     )
     return co
 
@@ -301,6 +305,7 @@ def build_case_summary(co: ClassifierOutput) -> str:
         f"Payment Method: {co.payment_method}",
         f"Accepted Alternative: {'Yes — ' + co.alternative_type if co.accepted_alternative else 'No'}",
         f"Passenger Traveled: {'Yes' if co.passenger_traveled else 'No'}",
+        f"Passenger Frustration Level: {co.frustration_level}",
     ]
     if co.flight_duration_hours is not None:
         lines.append(f"Flight Duration: {co.flight_duration_hours} hours")

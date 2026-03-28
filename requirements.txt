@@ -24,6 +24,8 @@ langgraph>=0.2.0
 # API & UI
 openai>=1.0.0
 huggingface_hub>=0.19.0,<0.26.0
+transformers>=4.30.0
+torch>=2.0.0
 gradio>=4.0.0
 
 # Belgeler (PDF, Word)
